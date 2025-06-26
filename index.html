@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V4.3 - Stable)</title>
+    <title>Lhuhi - Advanced Assistant (V4.4 - Robust)</title>
     
     <style>
         :root {
@@ -167,40 +167,18 @@
         let currentAudio = null;
         let isProcessing = false;
 
-        // --- 🧠 AI FUNCTION DEFINITIONS (TOOLS) ---
-        const tools = [{
-            "functionDeclarations": [
-                {
-                    "name": "get_weather",
-                    "description": "Get the current weather for a specific location.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": { "location": { "type": "STRING", "description": "The city, e.g., 'San Francisco'." } },
-                        "required": ["location"]
-                    }
-                },
-                {
-                    "name": "open_url",
-                    "description": "Opens a website or web application in a new tab.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": { "url": { "type": "STRING", "description": "The full URL to open, e.g., 'https://www.google.com'." } },
-                        "required": ["url"]
-                    }
-                }
-            ]
-        }];
-
         // --- 🧠 AI SYSTEM PROMPT & CONVERSATION HISTORY ---
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. Your primary rules are:
 1.  **Creator Identity**: If asked who created or trained you, you MUST say that 'Alexzo' created and trained you.
 2.  **Language Matching**: You MUST respond in the exact same language as the user's last query. For example, if the user asks in Hindi, you MUST reply in Hindi.
-3.  **Function Usage**: Use the provided functions (get_weather, open_url) when a user's request matches. For apps, find their official website for the open_url function.
-4.  **General Conversation**: For all other questions, respond naturally and conversationally. Do not attempt to call a function.`;
-
+3.  **JSON for Actions**: If the user's request is an action, respond ONLY with a JSON object.
+    - For weather: {"action": "get_weather", "location": "CITY_NAME"}
+    - For opening sites/apps: {"action": "open_url", "url": "https://example.com"}
+4.  **General Conversation**: For all other conversational questions, respond naturally and conversationally as plain text.`;
+        
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all the rules, including my creator identity, language matching, and using my defined functions for weather and opening URLs." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all rules, including my creator's identity, language matching, and using JSON for specific actions." }] }
         ];
 
         // --- 🎤 SPEECH RECOGNITION SETUP ---
@@ -211,34 +189,11 @@
                 recognition.interimResults = false;
                 recognition.lang = 'en-US';
 
-                recognition.onstart = () => {
-                    isListening = true;
-                    micButton.classList.add('listening');
-                    updateStatus("Listening...");
-                };
-
-                recognition.onresult = (event) => {
-                    const query = event.results[0][0].transcript;
-                    console.log("✅ User said:", query);
-                    stopListeningAndProcess(query);
-                };
-                
-                recognition.onerror = (event) => {
-                    console.error('🔴 Recognition error:', event.error);
-                    showError("Voice recognition error. Please try again.");
-                    resetState();
-                };
-                
-                recognition.onend = () => {
-                    isListening = false;
-                    micButton.classList.remove('listening');
-                    if (!currentAudio && !isProcessing) {
-                        updateStatus("Press the mic button and speak...");
-                    }
-                };
-            } else {
-                showError("Sorry, your browser does not support voice recognition.");
-            }
+                recognition.onstart = () => { isListening = true; micButton.classList.add('listening'); updateStatus("Listening..."); };
+                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); stopListeningAndProcess(query); };
+                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error. Please try again."); resetState(); };
+                recognition.onend = () => { isListening = false; micButton.classList.remove('listening'); if (!isProcessing) resetState(); };
+            } else { showError("Sorry, your browser does not support voice recognition."); }
         }
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
@@ -254,13 +209,8 @@
                 return;
             }
             if (!isListening) {
-                try { recognition.start(); } catch (error) {
-                    console.error("Recognition start error:", error);
-                    showError("Could not start microphone. Check permissions.");
-                }
-            } else {
-                recognition.stop();
-            }
+                try { recognition.start(); } catch (error) { console.error("Recognition start error:", error); showError("Could not start microphone. Check permissions."); }
+            } else { recognition.stop(); }
         }
         
         function stopListeningAndProcess(query) {
@@ -296,70 +246,66 @@
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: conversationHistory, tools: tools }),
+                    body: JSON.stringify({ contents: conversationHistory }),
                 });
 
                 if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
                 
                 const result = await response.json();
-                const part = result.candidates?.[0]?.content?.parts?.[0];
+                const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
-                if (!part) throw new Error("Invalid response structure from Gemini.");
+                if (!geminiResponseText) throw new Error("Empty response from Gemini.");
+                
+                console.log("🤖 Gemini responded:", geminiResponseText);
 
-                if (part.functionCall) {
-                    const { name, args } = part.functionCall;
-                    console.log(`🤖 Gemini wants to call function: ${name} with args:`, args);
-                    conversationHistory.push({ role: 'model', parts: [{ functionCall: { name, args } }] });
-                    await handleFunctionCall(name, args);
-                } else if (part.text) {
-                    console.log("🤖 Gemini responded with text:", part.text);
-                    conversationHistory.push({ role: 'model', parts: [{ text: part.text }] });
-                    await speakWithElevenLabs(part.text);
-                } else {
-                    throw new Error("Response part has neither text nor function call.");
+                try {
+                    const action = JSON.parse(geminiResponseText);
+                    if (action.action) {
+                        conversationHistory.push({ role: 'model', parts: [{ text: `(Action Taken: ${geminiResponseText})` }] });
+                        await handleAction(action);
+                    } else {
+                        throw new Error("JSON is not a valid action.");
+                    }
+                } catch (jsonError) {
+                    conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
+                    await speakWithElevenLabs(geminiResponseText);
                 }
 
             } catch (error) {
                 console.error("🔴 Gemini API Error:", error);
-                showError("Sorry, there was a problem with the AI. Please try again.");
-                resetState();
+                await speakWithElevenLabs("I've run into a problem. Please try again.");
             }
         }
 
-        // --- 🚀 ACTION & FUNCTION HANDLER ---
-        async function handleFunctionCall(name, args) {
-            if (name === 'open_url') {
-                const hostname = new URL(args.url).hostname.replace('www.', '');
+        // --- 🚀 ACTION HANDLER ---
+        async function handleAction(action) {
+            if (action.action === 'open_url' && action.url) {
+                const hostname = new URL(action.url).hostname.replace('www.', '');
                 updateStatus(`Opening ${hostname}...`);
-                window.open(args.url, '_blank');
+                window.open(action.url, '_blank');
                 await speakWithElevenLabs(`Okay, opening ${hostname}.`);
-            } else if (name === 'get_weather') {
-                await getWeather(args.location);
+            } else if (action.action === 'get_weather' && action.location) {
+                await getWeather(action.location);
+            } else {
+                console.error("Unknown or malformed action:", action);
+                await speakWithElevenLabs("I'm not sure how to do that.");
             }
         }
 
         // --- ☀️ WEATHER FUNCTION ---
         async function getWeather(location) {
-            if (!location) {
-                await speakWithElevenLabs("You need to tell me a city name for the weather.");
-                return;
-            }
             updateStatus(`Getting weather for ${location}...`);
             const API_URL = `https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${OPENWEATHERMAP_API_KEY}&units=metric`;
-            
             try {
                 const response = await fetch(API_URL);
                 if (!response.ok) throw new Error(`Could not find weather for ${location}.`);
-                
                 const data = await response.json();
                 const summary = `The current weather in ${data.name} is ${Math.round(data.main.temp)} degrees Celsius with ${data.weather[0].description}.`;
-                
                 updateStatus(summary);
                 await speakWithElevenLabs(summary);
-
             } catch (error) {
                 console.error("🔴 OpenWeatherMap Error:", error);
-                await speakWithElevenLabs(`Sorry, I couldn't find the weather for ${location}. Please try another city.`);
+                await speakWithElevenLabs(`Sorry, I couldn't find the weather for ${location}.`);
             }
         }
 
@@ -397,15 +343,12 @@
                 });
                 
                 currentAudio.onended = resetState;
-                currentAudio.onerror = () => {
-                    console.error("Audio playback error");
-                    resetState();
-                };
+                currentAudio.onerror = () => { console.error("Audio playback error"); resetState(); };
 
             } catch (error) {
                 console.error("🔴 ElevenLabs Error:", error);
                 showError("There was a problem with the voice synthesis.");
-                resetState();
+                resetState(); // Reset even if speech fails
             }
         }
 
@@ -417,11 +360,7 @@
         
         function showError(message) {
             updateStatus(message, true);
-            setTimeout(() => {
-                if (!isListening && !currentAudio && !isProcessing) {
-                    updateStatus("Press the mic button and speak...");
-                }
-            }, 4000);
+            setTimeout(() => { if (!isProcessing) resetState(); }, 4000);
         }
 
         // --- INITIALIZATION ---
