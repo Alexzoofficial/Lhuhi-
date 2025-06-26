@@ -4,269 +4,97 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lhuhi - AI Voice Assistant</title>
-    
     <style>
-        body {
-            background-color: #000000;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #ccc;
-        }
-        #status-text {
-            position: absolute;
-            top: 40px;
-            font-size: 1.2rem;
-            opacity: 0.7;
-            transition: opacity 0.3s;
-        }
-        .circle {
-            width: 200px;
-            height: 200px;
-            background: radial-gradient(circle, #007bff, #0056b3);
-            border-radius: 50%;
-            transition: all 0.3s ease-in-out;
-            box-shadow: 0 0 20px #007bff, 0 0 40px #007bff;
-        }
-        .circle.active {
-            transform: scale(1.2);
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 25px #007bff, 0 0 50px #007bff; }
-            50% { box-shadow: 0 0 50px #00aaff, 0 0 100px #00aaff; }
-            100% { box-shadow: 0 0 25px #007bff, 0 0 50px #007bff; }
-        }
-        .mic-container {
-            position: absolute;
-            bottom: 40px;
-        }
-        #mic-button {
-            background-color: #ffffff;
-            border: none;
-            border-radius: 50%;
-            padding: 20px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.7);
-        }
-        #mic-button:hover {
-            transform: scale(1.1);
-        }
-        #mic-icon {
-            width: 50px;
-            height: 50px;
-            display: block;
-        }
+        body { background-color: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
+        .circle { width: 200px; height: 200px; background: radial-gradient(circle, #007bff, #0056b3); border-radius: 50%; transition: all 0.3s ease; box-shadow: 0 0 20px #007bff, 0 0 40px #007bff; }
+        .circle.active { transform: scale(1.2); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 25px #007bff; } 50% { box-shadow: 0 0 50px #00aaff; } 100% { box-shadow: 0 0 25px #007bff; } }
+        .mic-container { position: absolute; bottom: 40px; }
+        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s; }
+        #mic-icon { width: 50px; height: 50px; display: block; }
+        #status { position: absolute; top: 40px; color: #888; font-size: 18px; text-align: center; padding: 0 20px;}
     </style>
 </head>
 <body>
-    <div id="status-text">Click the Mic to Start</div>
+    <div id="status">Click the mic to speak</div>
     <div class="circle" id="voice-circle"></div>
     <div class="mic-container">
         <button id="mic-button">
-            <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/000000/microphone.png" alt="Microphone On">
+            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
         </button>
     </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
-        const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
-        const SERPAPI_API_KEY = 'F4S40724716Dkhshadssfbdh17da4sdffsfh046fbs128683222909Dhhs44f';
-        const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-        const WAKE_WORD = 'lhuhi'; // Wake word (lowercase)
-
-        // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
         const micIcon = document.getElementById('mic-icon');
         const voiceCircle = document.getElementById('voice-circle');
-        const statusText = document.getElementById('status-text');
+        const statusDiv = document.getElementById('status');
+        
+        const micOnIcon = "https://img.icons8.com/ios-filled/100/microphone.png";
+        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/multiply.png";
 
         let isListening = false;
         let recognition;
-        const micOnIcon = "https://img.icons8.com/ios-glyphs/90/000000/microphone.png";
-        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/000000/no-microphone.png";
 
-        // --- CORE LOGIC ---
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
-            recognition.continuous = true; // IMPORTANT for wake word
-            recognition.lang = 'en-US'; // Use 'hi-IN' for Hindi, but en-US is often better for wake words
+            recognition.continuous = false;
+            recognition.lang = 'hi-IN';
 
+            recognition.onstart = () => { isListening = true; statusDiv.innerText = "Listening..."; micIcon.src = micOffIcon; voiceCircle.classList.add('active'); };
+            recognition.onend = () => { isListening = false; statusDiv.innerText = "Processing..."; micIcon.src = micOnIcon; };
             recognition.onresult = (event) => {
-                let finalTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    finalTranscript += event.results[i][0].transcript;
-                }
-                
-                finalTranscript = finalTranscript.toLowerCase().trim();
-                console.log("Heard:", finalTranscript);
+                const transcript = event.results[0][0].transcript;
+                sendQueryToBackend(transcript);
+            };
+        } else { alert('Sorry, speech recognition is not supported in this browser.'); }
 
-                if (finalTranscript.includes(WAKE_WORD)) {
-                    // Extract command after wake word
-                    let command = finalTranscript.substring(finalTranscript.indexOf(WAKE_WORD) + WAKE_WORD.length).trim();
-                    if (command) {
-                        statusText.innerText = `Processing: "${command}"`;
-                        console.log('Command:', command);
-                        recognition.stop(); // Stop listening to process
-                        analyzeWithGemini(command);
+        micButton.addEventListener('click', () => { isListening ? recognition.stop() : recognition.start(); });
+
+        async function sendQueryToBackend(query) {
+            voiceCircle.classList.add('active');
+            statusDiv.innerText = `Thinking...`;
+
+            try {
+                // Hamara serverless function is URL par milega
+                const response = await fetch('/.netlify/functions/ask', {
+                    method: 'POST',
+                    body: JSON.stringify({ query: query })
+                });
+
+                const contentType = response.headers.get("content-type");
+
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const command = await response.json();
+                    if (command.action === 'open_website') {
+                        statusDiv.innerText = `Opening ${command.url}...`;
+                        window.open(command.url, '_blank');
+                        voiceCircle.classList.remove('active');
+                    } else if (command.error) {
+                        throw new Error(command.error);
                     }
+                } else if (contentType && contentType.indexOf("audio/mpeg") !== -1) {
+                    // Audio response ko handle karna
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    
+                    statusDiv.innerText = "Lhuhi is speaking...";
+                    audio.onended = () => {
+                        statusDiv.innerText = "Click the mic to speak";
+                        voiceCircle.classList.remove('active');
+                    };
+                } else {
+                     throw new Error("Unknown response from server.");
                 }
-            };
-            
-            recognition.onstart = () => {
-                isListening = true;
-                micIcon.src = micOnIcon;
-                statusText.innerText = `Listening for "Lhuhi"...`;
-                voiceCircle.classList.remove('active'); // No animation while just listening
-            };
-
-            recognition.onend = () => {
-                isListening = false;
-                micIcon.src = micOffIcon;
-                statusText.innerText = "Click the Mic to Start";
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                statusText.innerText = "Error in listening.";
-            };
-
-        } else {
-            alert('Sorry, your browser does not support voice recognition.');
-        }
-
-        micButton.addEventListener('click', () => {
-            if (isListening) {
-                recognition.stop();
-            } else {
-                recognition.start();
-            }
-        });
-
-        // --- GEMINI (BRAIN) ---
-        async function analyzeWithGemini(command) {
-            voiceCircle.classList.add('active'); // Start animation for processing
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-            const prompt = `
-                You are a sophisticated AI brain for a voice assistant named Lhuhi. Analyze the user's command and respond ONLY with a JSON object.
-                The JSON must have "action" and "data".
-                Possible actions are: "search", "open_website", "general_query".
-                
-                1.  If the command requires up-to-date information from the web (e.g., "what is the weather", "who won the match", "price of bitcoin"), the action is "search". The 'data' should be the search query.
-                    Example: "who is the president of France" -> {"action": "search", "data": "who is the president of France"}
-
-                2.  If the command is to open a specific website (e.g., "open youtube.com", "go to wikipedia"), the action is "open_website". The 'data' should be the full URL.
-                    Example: "open youtube" -> {"action": "open_website", "data": "https://www.youtube.com"}
-                    Example: "google.com kholo" -> {"action": "open_website", "data": "https://www.google.com"}
-
-                3.  For anything else (general knowledge, conversation, storytelling), the action is "general_query". The 'data' should be a direct, helpful answer.
-                    Example: "tell me a joke" -> {"action": "general_query", "data": "Why don't scientists trust atoms? Because they make up everything!"}
-                
-                User command is: "${command}". Return only the JSON object.
-            `;
-            
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-                });
-                const result = await response.json();
-                const text = result.candidates[0].content.parts[0].text;
-                const cleanJson = text.replace(/```json\n|\n```/g, '').trim();
-                const actionObject = JSON.parse(cleanJson);
-                
-                await performAction(actionObject);
-            } catch (error) {
-                console.error("Gemini Error:", error);
-                await speakWithElevenLabs("Maaf kijiye, main samajh nahi paya.");
-            }
-        }
-        
-        // --- ACTION HANDLER ---
-        async function performAction(actionObject) {
-            switch (actionObject.action) {
-                case 'search':
-                    await performSerpAPISearch(actionObject.data);
-                    break;
-                case 'open_website':
-                    await speakWithElevenLabs(`Theek hai, ${actionObject.data} khol raha hun.`);
-                    window.open(actionObject.data, '_blank');
-                    break;
-                case 'general_query':
-                    await speakWithElevenLabs(actionObject.data);
-                    break;
-                default:
-                    await speakWithElevenLabs("Mujhe samajh nahi aaya, kripya dobara kahein.");
-            }
-            // After action, restart listening for wake word
-            if (!isListening) {
-                recognition.start();
-            }
-        }
-
-        // --- SERPAPI (WEB SEARCH) ---
-        async function performSerpAPISearch(query) {
-            const PROXY_URL = `https://api.allorigins.win/raw?url=`; // CORS Proxy
-            const API_URL = `${PROXY_URL}https://serpapi.com/search.json?q=${encodeURIComponent(query)}&api_key=${SERPAPI_API_KEY}`;
-            try {
-                const response = await fetch(API_URL);
-                const results = await response.json();
-                let answer = results.answer_box?.answer || results.answer_box?.snippet || results.knowledge_graph?.description || results.organic_results?.[0]?.snippet || "Mujhe web par iska seedha jawab nahi mila.";
-                await speakWithElevenLabs(answer);
-            } catch (error) {
-                console.error("SerpAPI Error:", error);
-                await speakWithElevenLabs("Internet search mein koi samasya aa gayi hai.");
-            }
-        }
-
-        // --- 11LABS (VOICE with STREAMING for SPEED) ---
-        async function speakWithElevenLabs(text) {
-            voiceCircle.classList.add('active'); // Animation during speech
-            statusText.innerText = "Speaking...";
-            
-            const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`;
-            
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'audio/mpeg',
-                        'Content-Type': 'application/json',
-                        'xi-api-key': ELEVENLABS_API_KEY,
-                    },
-                    body: JSON.stringify({
-                        text: text,
-                        model_id: 'eleven_multilingual_v2',
-                    }),
-                });
-
-                if (!response.ok) throw new Error("ElevenLabs API failed.");
-
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                audio.play();
-
-                // Wait for audio to finish before deactivating circle
-                await new Promise(resolve => {
-                    audio.onended = resolve;
-                });
 
             } catch (error) {
-                console.error("ElevenLabs Error:", error);
-            } finally {
+                console.error('Error:', error);
+                statusDiv.innerText = "Error! Could not connect to the assistant.";
                 voiceCircle.classList.remove('active');
-                statusText.innerText = 'Listening for "Lhuhi"...'; // Reset status
             }
         }
     </script>
 </body>
-</html
+</html>
