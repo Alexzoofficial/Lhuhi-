@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V4.2)</title>
+    <title>Lhuhi - Advanced Assistant (V4.3 - Stable)</title>
     
     <style>
         :root {
@@ -167,17 +167,40 @@
         let currentAudio = null;
         let isProcessing = false;
 
+        // --- 🧠 AI FUNCTION DEFINITIONS (TOOLS) ---
+        const tools = [{
+            "functionDeclarations": [
+                {
+                    "name": "get_weather",
+                    "description": "Get the current weather for a specific location.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": { "location": { "type": "STRING", "description": "The city, e.g., 'San Francisco'." } },
+                        "required": ["location"]
+                    }
+                },
+                {
+                    "name": "open_url",
+                    "description": "Opens a website or web application in a new tab.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": { "url": { "type": "STRING", "description": "The full URL to open, e.g., 'https://www.google.com'." } },
+                        "required": ["url"]
+                    }
+                }
+            ]
+        }];
+
         // --- 🧠 AI SYSTEM PROMPT & CONVERSATION HISTORY ---
-        const systemInstruction = `You are a helpful AI assistant named Lhuhi. You have special functions. Your primary rules are:
-1.  **Language Matching**: You MUST respond in the exact same language as the user's last query. For example, if the user asks in Hindi, you MUST reply in Hindi.
-2.  **Creator Identity**: If asked who created or trained you, you MUST say that 'Alexzo' created and trained you.
-3.  **URL Function**: If the user asks to open a website or an application, determine the correct URL. Then, respond ONLY with a JSON object in this exact format: {"action": "open_url", "url": "THE_URL_HERE"}. For apps, use their official website (e.g., spotify.com).
-4.  **Weather Function**: If the user asks for the weather, extract the city name. Then, respond ONLY with a JSON object in this exact format: {"action": "get_weather", "location": "CITY_NAME"}.
-5.  **General Conversation**: For all other conversational questions, respond naturally and conversationally without using JSON.`;
-        
+        const systemInstruction = `You are a helpful AI assistant named Lhuhi. Your primary rules are:
+1.  **Creator Identity**: If asked who created or trained you, you MUST say that 'Alexzo' created and trained you.
+2.  **Language Matching**: You MUST respond in the exact same language as the user's last query. For example, if the user asks in Hindi, you MUST reply in Hindi.
+3.  **Function Usage**: Use the provided functions (get_weather, open_url) when a user's request matches. For apps, find their official website for the open_url function.
+4.  **General Conversation**: For all other questions, respond naturally and conversationally. Do not attempt to call a function.`;
+
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all the rules, including language matching, my creator identity, and using JSON for URL and weather functions." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all the rules, including my creator identity, language matching, and using my defined functions for weather and opening URLs." }] }
         ];
 
         // --- 🎤 SPEECH RECOGNITION SETUP ---
@@ -223,7 +246,6 @@
 
         function toggleListening() {
             if (isProcessing) return;
-            
             if (currentAudio) {
                 console.log("🚫 Interrupting AI speech.");
                 currentAudio.pause();
@@ -231,13 +253,10 @@
                 resetState();
                 return;
             }
-
             if (!isListening) {
-                try {
-                    recognition.start();
-                } catch (error) {
+                try { recognition.start(); } catch (error) {
                     console.error("Recognition start error:", error);
-                    showError("Could not start microphone. Please check permissions.");
+                    showError("Could not start microphone. Check permissions.");
                 }
             } else {
                 recognition.stop();
@@ -245,17 +264,16 @@
         }
         
         function stopListeningAndProcess(query) {
-            if (isListening) {
-                recognition.stop();
-            }
+            if (isListening) recognition.stop();
             isProcessing = true;
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             analyzeWithGemini(query);
         }
         
         function resetState() {
-            isListening = false;
             isProcessing = false;
+            isListening = false;
+            currentAudio = null;
             micButton.classList.remove('listening');
             voiceCircle.classList.remove('active');
             updateStatus("Press the mic button and speak...");
@@ -272,43 +290,34 @@
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
 
-            if (conversationHistory.length > 12) {
-                conversationHistory = [conversationHistory[0], conversationHistory[1], ...conversationHistory.slice(-10)];
-            }
-
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        contents: conversationHistory,
-                        generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 1024 }
-                    }),
+                    body: JSON.stringify({ contents: conversationHistory, tools: tools }),
                 });
 
                 if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
                 
                 const result = await response.json();
-                if (!result.candidates || result.candidates.length === 0) throw new Error("No response from Gemini.");
+                const part = result.candidates?.[0]?.content?.parts?.[0];
 
-                const geminiResponseText = result.candidates[0].content.parts[0].text.trim();
-                console.log("🤖 Gemini decided:", geminiResponseText);
+                if (!part) throw new Error("Invalid response structure from Gemini.");
 
-                try {
-                    const potentialAction = JSON.parse(geminiResponseText);
-                    if (potentialAction.action) {
-                        handleAction(potentialAction);
-                        conversationHistory.push({ role: 'model', parts: [{ text: `(Action Taken: ${JSON.stringify(potentialAction)})` }] });
-                        return;
-                    }
-                } catch (e) {
-                    // Not a JSON action, so it's a conversational response.
+                if (part.functionCall) {
+                    const { name, args } = part.functionCall;
+                    console.log(`🤖 Gemini wants to call function: ${name} with args:`, args);
+                    conversationHistory.push({ role: 'model', parts: [{ functionCall: { name, args } }] });
+                    await handleFunctionCall(name, args);
+                } else if (part.text) {
+                    console.log("🤖 Gemini responded with text:", part.text);
+                    conversationHistory.push({ role: 'model', parts: [{ text: part.text }] });
+                    await speakWithElevenLabs(part.text);
+                } else {
+                    throw new Error("Response part has neither text nor function call.");
                 }
-
-                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
-                await speakWithElevenLabs(geminiResponseText);
 
             } catch (error) {
                 console.error("🔴 Gemini API Error:", error);
@@ -317,22 +326,22 @@
             }
         }
 
-        // --- 🚀 ACTION HANDLER ---
-        function handleAction(action) {
-            if (action.action === 'open_url') {
-                const hostname = new URL(action.url).hostname.replace('www.', '');
+        // --- 🚀 ACTION & FUNCTION HANDLER ---
+        async function handleFunctionCall(name, args) {
+            if (name === 'open_url') {
+                const hostname = new URL(args.url).hostname.replace('www.', '');
                 updateStatus(`Opening ${hostname}...`);
-                window.open(action.url, '_blank');
-                speakWithElevenLabs(`Okay, opening ${hostname}.`);
-            } else if (action.action === 'get_weather') {
-                getWeather(action.location);
+                window.open(args.url, '_blank');
+                await speakWithElevenLabs(`Okay, opening ${hostname}.`);
+            } else if (name === 'get_weather') {
+                await getWeather(args.location);
             }
         }
 
         // --- ☀️ WEATHER FUNCTION ---
         async function getWeather(location) {
             if (!location) {
-                speakWithElevenLabs("You need to tell me a city name for the weather.");
+                await speakWithElevenLabs("You need to tell me a city name for the weather.");
                 return;
             }
             updateStatus(`Getting weather for ${location}...`);
@@ -340,22 +349,17 @@
             
             try {
                 const response = await fetch(API_URL);
-                if (!response.ok) {
-                    throw new Error(`Could not find weather for ${location}. Status: ${response.status}`);
-                }
-                const data = await response.json();
-                const temp = Math.round(data.main.temp);
-                const description = data.weather[0].description;
-                const city = data.name;
+                if (!response.ok) throw new Error(`Could not find weather for ${location}.`);
                 
-                const summary = `The current weather in ${city} is ${temp} degrees Celsius with ${description}.`;
+                const data = await response.json();
+                const summary = `The current weather in ${data.name} is ${Math.round(data.main.temp)} degrees Celsius with ${data.weather[0].description}.`;
+                
                 updateStatus(summary);
                 await speakWithElevenLabs(summary);
 
             } catch (error) {
                 console.error("🔴 OpenWeatherMap Error:", error);
-                showError(`Sorry, I couldn't find the weather for ${location}.`);
-                speakWithElevenLabs(`Sorry, I couldn't find the weather for ${location}. Please try another city.`);
+                await speakWithElevenLabs(`Sorry, I couldn't find the weather for ${location}. Please try another city.`);
             }
         }
 
@@ -365,10 +369,8 @@
                 resetState();
                 return;
             }
-
             updateStatus("Speaking...");
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
-            
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -380,26 +382,25 @@
                     body: JSON.stringify({
                         text: text, 
                         model_id: 'eleven_multilingual_v2',
-                        voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.5, speaker_boost: true },
+                        voice_settings: { stability: 0.55, similarity_boost: 0.75 }
                     }),
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(`ElevenLabs Error: ${errorData.detail?.message || response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`ElevenLabs Error: ${response.statusText}`);
 
                 const audioBlob = await response.blob();
                 currentAudio = new Audio(URL.createObjectURL(audioBlob));
-                
                 currentAudio.play().catch(e => {
                     console.error("Audio play error:", e);
-                    showError("Audio play error. Please interact with the page first.");
+                    showError("Audio play error. Please click the page first.");
                     resetState();
                 });
                 
-                currentAudio.onended = () => { currentAudio = null; resetState(); };
-                currentAudio.onerror = () => { currentAudio = null; resetState(); };
+                currentAudio.onended = resetState;
+                currentAudio.onerror = () => {
+                    console.error("Audio playback error");
+                    resetState();
+                };
 
             } catch (error) {
                 console.error("🔴 ElevenLabs Error:", error);
