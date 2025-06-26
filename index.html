@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V5.0 - Simplified & Stable)</title>
+    <title>Lhuhi - Advanced Assistant (V5.1 - Most Reliable)</title>
     
     <style>
         :root {
@@ -130,7 +130,6 @@
         const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-        // Weather API has been removed for stability.
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -142,12 +141,13 @@
         let currentAudio = null;
         let isProcessing = false;
 
-        // --- 🧠 AI SYSTEM PROMPT (SIMPLIFIED) ---
-        const systemInstruction = `You are a helpful AI assistant named Lhuhi. Your primary rules are:
-1.  **Creator Identity**: If asked who created or trained you, you MUST say that 'Alexzo' created and trained you.
-2.  **Language Matching**: You MUST respond in the exact same language as the user's last query.
-3.  **JSON for URL Action**: If the user's request is to open a website or app, respond ONLY with a JSON object: {"action": "open_url", "url": "https://example.com"}
-4.  **General Conversation**: For all other questions, respond naturally as plain text.`;
+        // --- 🧠 AI SYSTEM PROMPT (IMPROVED) ---
+        const systemInstruction = `You are a helpful AI assistant named Lhuhi.
+        **RULES:**
+        1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
+        2.  **Language**: ALWAYS respond in the exact same language as the user's last query.
+        3.  **URL Action**: If the user wants to open a website or app (like YouTube, Google, etc.), your response MUST include a JSON object with the URL, like this: \`{"action": "open_url", "url": "https://www.youtube.com"}\`. You can add a short conversational phrase before the JSON if you want.
+        4.  **Conversation**: For ALL other questions, just have a normal, friendly conversation. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
@@ -200,7 +200,7 @@
             updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION ---
+        // --- 🧠 GEMINI AI INTEGRATION (REWRITTEN FOR FLEXIBILITY) ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that.");
@@ -226,15 +226,24 @@
 
                 if (!geminiResponseText) throw new Error("Empty response from Gemini.");
                 console.log("🤖 Gemini responded:", geminiResponseText);
+                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-                try {
-                    const action = JSON.parse(geminiResponseText);
-                    if (action.action === 'open_url') {
-                        conversationHistory.push({ role: 'model', parts: [{ text: `(Action: ${geminiResponseText})` }] });
-                        await handleAction(action);
-                    } else { throw new Error("JSON is not a valid action."); }
-                } catch (jsonError) {
-                    conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
+                // **NEW FLEXIBLE LOGIC**
+                // Use a regular expression to find an action JSON within the text
+                const actionRegex = /{\s*"action"\s*:\s*"open_url"[\s\S]*?}/;
+                const match = geminiResponseText.match(actionRegex);
+
+                if (match) {
+                    const actionJsonString = match[0];
+                    const action = JSON.parse(actionJsonString);
+                    // Speak any text that came *before* the action command
+                    const textToSpeak = geminiResponseText.substring(0, match.index).trim();
+                    if(textToSpeak) {
+                        await speakWithElevenLabs(textToSpeak, false); // Speak without resetting
+                    }
+                    await handleAction(action);
+                } else {
+                    // It's a normal conversation, just speak the whole text
                     await speakWithElevenLabs(geminiResponseText);
                 }
             } catch (error) {
@@ -243,16 +252,17 @@
             }
         }
 
-        // --- 🚀 ACTION HANDLER (SIMPLIFIED) ---
+        // --- 🚀 ACTION HANDLER ---
         async function handleAction(action) {
             try {
                 if (action.action === 'open_url' && action.url) {
                     const hostname = new URL(action.url).hostname.replace('www.', '');
                     updateStatus(`Opening ${hostname}...`);
                     window.open(action.url, '_blank');
-                    await speakWithElevenLabs(`Okay, opening ${hostname}.`);
+                    // We don't speak here, as the initial text is spoken by the main function.
+                    // This prevents double-speaking.
                 } else {
-                    throw new Error("Unknown or malformed action.");
+                    throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -260,10 +270,10 @@
             }
         }
 
-        // --- 🔊 ELEVENLABS TTS INTEGRATION (STABLE VERSION) ---
-        async function speakWithElevenLabs(text) {
+        // --- 🔊 ELEVENLABS TTS INTEGRATION (STABLE) ---
+        async function speakWithElevenLabs(text, shouldReset = true) {
             if (!text || !text.trim()) {
-                resetState();
+                if(shouldReset) resetState();
                 return;
             }
             updateStatus("Speaking...");
@@ -285,21 +295,18 @@
                 const audioBlob = await response.blob();
                 currentAudio = new Audio(URL.createObjectURL(audioBlob));
                 
-                // This promise ensures the code waits for the audio to finish.
                 await new Promise((resolve, reject) => {
                     currentAudio.onended = resolve;
                     currentAudio.onerror = reject;
                     currentAudio.play().catch(reject);
                 });
-
                 console.log("✅ Speech finished successfully.");
 
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
             } finally {
-                // This block ALWAYS runs, ensuring the UI resets correctly *after* audio finishes or fails.
-                resetState();
+                if(shouldReset) resetState();
             }
         }
 
@@ -323,4 +330,4 @@
         });
     </script>
 </body>
-</html
+</html>
