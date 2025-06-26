@@ -1,227 +1,226 @@
-// ===================================================================================
-// FILE 1: .env (Is file mein neeche ka text copy-paste karein)
-// ===================================================================================
-
-# Yahan apni real aur secret API keys daalein.
-# Shuru ya aakhir mein koi quote ya space na lagayein.
-
-GEMINI_API_KEY="AIzaSy... (Aapki Nayi Google Gemini Key Yahan Daalein)"
-ELEVENLABS_API_KEY="sk_... (Aapki Nayi ElevenLabs Key Yahan Daalein)"
-SERPAPI_API_KEY="... (Aapki Nayi SerpAPI Key Yahan Daalein)"
-
-
-
-// ===================================================================================
-// FILE 2: server.js (Is file mein neeche ka code copy-paste karein)
-// ===================================================================================
-
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
-const app = express();
-app.use(cors()); // Frontend aur backend ko communicate karne ki permission deta hai
-app.use(express.json());
-
-const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj'; // Aapki voice ID
-
-// Yeh endpoint frontend se command receive karega
-app.post('/ask', async (req, res) => {
-    const { query } = req.body;
-
-    if (!query) {
-        return res.status(400).json({ error: 'Query is required' });
-    }
-
-    try {
-        // Step 1: Gemini se command ka matlab samjho
-        const geminiPrompt = `
-            Analyze the user's command: "${query}". Respond ONLY with a JSON object.
-            Possible intents: "live_search", "open_website", "general_query".
-            
-            - For real-time info: {"action": "live_search", "data": "search query"}
-            - To open a website: {"action": "open_website", "data": "youtube.com"}
-            - For general conversation: {"action": "general_query", "data": "The query itself"}
-
-            User command: "${query}".
-        `;
-        
-        const geminiResponse = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-            { contents: [{ parts: [{ text: geminiPrompt }] }] }
-        );
-
-        const geminiResultText = geminiResponse.data.candidates[0].content.parts[0].text;
-        const actionObject = JSON.parse(geminiResultText.replace(/```json\n|\n```/g, ''));
-        
-        let finalTextToSpeak = "";
-
-        // Step 2: Action ke hisaab se kaam karo
-        if (actionObject.action === 'live_search') {
-            const serpApiResponse = await axios.get(`https://serpapi.com/search.json`, {
-                params: { q: actionObject.data, api_key: process.env.SERPAPI_API_KEY }
-            });
-            finalTextToSpeak = serpApiResponse.data.answer_box?.answer || serpApiResponse.data.organic_results?.[0]?.snippet || "Mujhe iska jawab nahi mil paaya.";
-        
-        } else if (actionObject.action === 'open_website') {
-             // Frontend ko website kholne ka command bhejo
-             return res.json({ action: 'open_website', url: `https://${actionObject.data}` });
-        
-        } else { // general_query
-            const generalQueryPrompt = `You are Lhuhi, a helpful voice assistant. Give a concise and friendly answer to this question: "${actionObject.data}"`;
-            const generalResponse = await axios.post(
-                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-                 { contents: [{ parts: [{ text: generalQueryPrompt }] }] }
-            );
-            finalTextToSpeak = generalResponse.data.candidates[0].content.parts[0].text;
-        }
-
-        // Step 3: ElevenLabs se Audio Stream karo (instant response ke liye)
-        const elevenLabsResponse = await axios.post(
-            `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`,
-            {
-                text: finalTextToSpeak,
-                model_id: 'eleven_multilingual_v2',
-                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-            },
-            {
-                headers: {
-                    'Accept': 'audio/mpeg',
-                    'xi-api-key': process.env.ELEVENLABS_API_KEY,
-                    'Content-Type': 'application/json',
-                },
-                responseType: 'stream'
-            }
-        );
-        
-        // Audio stream ko seedha frontend ko bhej do
-        res.setHeader('Content-Type', 'audio/mpeg');
-        elevenLabsResponse.data.pipe(res);
-
-    } catch (error) {
-        console.error('Error:', error.message);
-        res.status(500).json({ error: 'Server mein kuchh gadbad ho gayi hai.' });
-    }
-});
-
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`✅ Lhuhi ka server http://localhost:${PORT} par chal raha hai`);
-});
-
-
-
-
-// ===================================================================================
-// FILE 3: index.html (Is file mein neeche ka code copy-paste karein)
-// ===================================================================================
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Voice Assistant</title>
+    <title>Lhuhi - Advanced Voice Assistant</title>
+    
     <style>
-        body { background-color: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        .circle { width: 200px; height: 200px; background: radial-gradient(circle, #007bff, #0056b3); border-radius: 50%; transition: all 0.3s ease; box-shadow: 0 0 20px #007bff, 0 0 40px #007bff; }
+        body { background-color: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; color: #999; }
+        .circle { width: 200px; height: 200px; background: radial-gradient(circle, #007bff, #0056b3); border-radius: 50%; transition: all 0.3s ease-in-out; box-shadow: 0 0 20px #007bff, 0 0 40px #007bff, 0 0 60px #007bff; }
         .circle.active { transform: scale(1.2); animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 25px #007bff; } 50% { box-shadow: 0 0 50px #00aaff; } 100% { box-shadow: 0 0 25px #007bff; } }
-        .mic-container { position: absolute; bottom: 40px; }
-        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0px 5px 15px rgba(0, 123, 255, 0.5); }
-        #mic-button:hover { transform: scale(1.1); }
+        @keyframes pulse { 0% { box-shadow: 0 0 25px #007bff, 0 0 50px #007bff; } 50% { box-shadow: 0 0 50px #00aaff, 0 0 100px #00aaff; } 100% { box-shadow: 0 0 25px #007bff, 0 0 50px #007bff; } }
+        .container { position: absolute; text-align: center; }
+        .mic-container { bottom: 40px; }
+        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 0 15px rgba(255, 255, 255, 0.7); }
+        #mic-button:hover { transform: scale(1.1); box-shadow: 0 0 25px rgba(0, 123, 255, 0.9); }
         #mic-icon { width: 50px; height: 50px; display: block; }
-        #status { position: absolute; top: 40px; color: #aaa; font-size: 18px; text-align: center; padding: 0 20px; }
+        #status-text { top: 20px; font-size: 1.2em; }
     </style>
 </head>
 <body>
-    <div id="status">Click the mic to speak</div>
+
+    <div class="container" id="status-text">Lhuhi ko activate karne ke liye 'Lhuhi' bolein ya Mic button dabayein</div>
     <div class="circle" id="voice-circle"></div>
-    <div class="mic-container">
+    <div class="container mic-container">
         <button id="mic-button">
-            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
+            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/ffffff/microphone.png" alt="Microphone Off">
         </button>
     </div>
 
     <script>
+        // --- CONFIGURATION ---
+        const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY';
+        const ELEVENLABS_API_KEY = 'YOUR_NEW_11LABS_API_KEY';
+        const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
+        const WAKE_WORD = "lhuhi"; // Hamara wake word
+
+        // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
         const micIcon = document.getElementById('mic-icon');
         const voiceCircle = document.getElementById('voice-circle');
-        const statusDiv = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
         
-        const micOnIcon = "https://img.icons8.com/ios-filled/100/microphone.png";
-        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/multiply.png"; // Cross icon
+        const micOnIcon = "https://img.icons8.com/ios-filled/100/007bff/microphone.png";
+        const micOffIcon = "https://img.icons8.com/ios-filled/100/ffffff/microphone.png";
+        const micMutedIcon = "https://img.icons8.com/ios-glyphs/90/ff4d4d/no-microphone.png";
 
         let isListening = false;
-        let audioContext;
+        let isSpeaking = false;
         let recognition;
 
+        // --- SPEECH RECOGNITION (INPUT) ---
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
-            recognition.continuous = false;
+            recognition.continuous = true; // IMPORTANT for wake word
+            recognition.interimResults = true; // Get results as user speaks
             recognition.lang = 'hi-IN';
 
-            recognition.onstart = () => { isListening = true; statusDiv.innerText = "Listening..."; micIcon.src = micOffIcon; voiceCircle.classList.add('active'); };
-            recognition.onend = () => { isListening = false; statusDiv.innerText = "Processing..."; micIcon.src = micOnIcon; };
             recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                sendQueryToBackend(transcript);
+                let final_transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        final_transcript += event.results[i][0].transcript;
+                    }
+                }
+                
+                const query = final_transcript.trim().toLowerCase();
+                if (query) {
+                     console.log("Heard:", query);
+                }
+
+                if (isListening && query) {
+                    // If actively listening, process the command
+                    stopListening();
+                    statusText.textContent = "Soch raha hun...";
+                    analyzeWithGemini(query);
+                } else if (query.includes(WAKE_WORD) && !isSpeaking) {
+                    // If not listening but wake word is detected
+                    console.log("WAKE WORD DETECTED!");
+                    startListening();
+                    speakWithBrowserTTS("Ji, boliye"); // Quick response
+                }
             };
-        } else { alert('Sorry, your browser does not support speech recognition.'); }
+            
+            recognition.onerror = (event) => { console.error('Recognition error:', event.error); };
+            recognition.onend = () => { 
+                // Restart recognition to keep it running for wake word
+                if(!isSpeaking) recognition.start(); 
+            };
+            
+            // Start listening for wake word on page load
+            recognition.start();
 
-        micButton.addEventListener('click', () => { isListening ? recognition.stop() : recognition.start(); });
+        } else { alert('Sorry, your browser does not support voice recognition.'); }
 
-        async function sendQueryToBackend(query) {
+        // --- CONTROL FUNCTIONS ---
+        function startListening() {
+            isListening = true;
             voiceCircle.classList.add('active');
-            statusDiv.innerText = `Thinking...`;
+            micIcon.src = micOnIcon;
+            statusText.textContent = "Sun raha hun...";
+        }
 
+        function stopListening() {
+            isListening = false;
+            micIcon.src = micOffIcon;
+            voiceCircle.classList.remove('active');
+            statusText.textContent = `Lhuhi ko activate karne ke liye '${WAKE_WORD}' bolein ya Mic button dabayein`;
+        }
+
+        micButton.addEventListener('click', () => {
+            if (!isListening) {
+                startListening();
+            } else {
+                stopListening();
+            }
+        });
+
+        // --- GEMINI AI (THE BRAIN) ---
+        async function analyzeWithGemini(userQuery) {
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+            
+            const prompt = `
+                You are Lhuhi, an intelligent voice assistant. Analyze the user's command and respond in a JSON format.
+                User command: "${userQuery}".
+
+                1.  If the user asks to open a website (e.g., "YouTube kholo", "open google.com"), the action is "open_website". Extract the standard URL. For "youtube", data should be "https://www.youtube.com".
+                    Example: "Google khol do" -> {"action": "open_website", "data": "https://www.google.com"}
+
+                2.  If the query is a general knowledge question, a conversation, a command to write a story, poem, or requires a detailed explanation, the action is "general_query". Generate the answer yourself in Hindi.
+                    Example: "Suraj garam kyun hota hai" -> {"action": "general_query", "data": "Sooraj mukhya roop se hydrogen aur helium gaso se bana ek vishaal gas ka gola hai. Iske kendra mein পারমাণবিক संलयन (nuclear fusion) naam ki prakriya hoti hai, jisse apar urja paida hoti hai, aur isi vajah se yah itna garam hota hai."}
+
+                3.  If none of the above, assume it's a search query. The action is "general_query" and the data should be the answer. For queries like 'What is the capital of France?', provide the answer directly.
+                    Example: "bharat ki rajdhani" -> {"action": "general_query", "data": "Bharat ki rajdhani New Delhi hai."}
+
+                Provide ONLY the JSON object. Do not add any other text.
+            `;
+            
             try {
-                // Backend server ko call karo
-                const response = await fetch('http://localhost:3000/ask', {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
                 });
+                const result = await response.json();
+                const geminiResponseText = result.candidates[0].content.parts[0].text;
+                const cleanJsonString = geminiResponseText.replace(/```json\n|\n```/g, '').trim();
+                const actionObject = JSON.parse(cleanJsonString);
                 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error);
-                }
+                await performAction(actionObject);
 
-                const contentType = response.headers.get("content-type");
-
-                if (contentType && contentType.indexOf("application/json") !== -1) {
-                    const command = await response.json();
-                    if (command.action === 'open_website') {
-                        statusDiv.innerText = `Opening ${command.url}...`;
-                        window.open(command.url, '_blank');
-                        voiceCircle.classList.remove('active');
-                    }
-                } else if (contentType && contentType.indexOf("audio/mpeg") !== -1) {
-                    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const audioBuffer = await response.arrayBuffer();
-                    const audioSource = audioContext.createBufferSource();
-                    
-                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
-                        audioSource.buffer = buffer;
-                        audioSource.connect(audioContext.destination);
-                        audioSource.start(0);
-                        statusDiv.innerText = "Lhuhi is speaking...";
-                        
-                        audioSource.onended = () => {
-                           statusDiv.innerText = "Click the mic to speak";
-                           voiceCircle.classList.remove('active');
-                        }
-                    });
-                } else {
-                     throw new Error("Unknown response from server.");
-                }
             } catch (error) {
-                console.error('Error:', error);
-                statusDiv.innerText = "Error! " + error.message;
-                voiceCircle.classList.remove('active');
+                console.error("Error with Gemini:", error);
+                await speakWithElevenLabs("Maaf kijiye, kuchh takneeki samasya aa gayi hai.");
             }
+        }
+
+        // --- ACTION HANDLER ---
+        async function performAction(actionObject) {
+            const { action, data } = actionObject;
+
+            switch (action) {
+                case 'open_website':
+                    await speakWithElevenLabs(`Theek hai, ${new URL(data).hostname} khol raha hun.`);
+                    window.open(data, '_blank');
+                    break;
+                
+                case 'general_query':
+                default:
+                    await speakWithElevenLabs(data);
+            }
+        }
+
+        // --- ELEVENLABS TTS (VOICE OUTPUT with STREAMING) ---
+        async function speakWithElevenLabs(text) {
+            isSpeaking = true;
+            voiceCircle.classList.add('active');
+            statusText.textContent = "Bol raha hun...";
+
+            const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'audio/mpeg',
+                        'Content-Type': 'application/json',
+                        'xi-api-key': ELEVENLABS_API_KEY,
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        model_id: 'eleven_multilingual_v2',
+                        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+                    }),
+                });
+
+                if (!response.ok) throw new Error(`ElevenLabs API Error: ${response.statusText}`);
+
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createBufferSource();
+                const audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+                
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+
+                source.onended = () => {
+                    isSpeaking = false;
+                    stopListening(); // Reset state after speaking
+                };
+
+            } catch (error) {
+                console.error("Error with ElevenLabs:", error);
+                isSpeaking = false;
+                stopListening();
+            }
+        }
+        
+        // --- Fallback Browser TTS for quick responses ---
+        function speakWithBrowserTTS(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'hi-IN';
+            window.speechSynthesis.speak(utterance);
         }
     </script>
 </body>
