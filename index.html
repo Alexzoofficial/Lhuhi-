@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V9.0 - No Interrupt)</title>
+    <title>Lhuhi - Assistant (V10.0 - Final & Stable)</title>
     
     <style>
         :root {
@@ -74,7 +74,6 @@
             transform: scale(1.05);
         }
         
-        /* This style will apply when the button is disabled */
         #mic-button:disabled {
             cursor: not-allowed;
             opacity: 0.5;
@@ -123,7 +122,7 @@
 </head>
 <body>
 
-    <div class="container" id="status-text">Press the mic button and speak...</div>
+    <div class="container" id="status-text">Press the mic button to start...</div>
     <div class="circle" id="voice-circle"></div>
     <div class="container mic-container">
         <button id="mic-button" aria-label="Microphone button">
@@ -133,7 +132,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk'; // New API Key
+        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         
@@ -144,6 +143,8 @@
         
         let recognition;
         let audioContext;
+        let isInitialized = false;
+        let isBusy = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. **RULES:**
@@ -157,69 +158,74 @@
             { role: 'model', parts: [{ text: "Okay, I understand all the rules." }] }
         ];
 
-        // --- 🎤 SPEECH RECOGNITION SETUP ---
-        function initializeSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window) {
-                recognition = new webkitSpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = 'en-US';
+        // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
+        function initializeApp() {
+            try {
+                // 1. Create and unlock Audio Context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                
+                // 2. Setup Speech Recognition
+                if ('webkitSpeechRecognition' in window) {
+                    recognition = new webkitSpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
 
-                recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
-                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
-                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); resetUI(); };
-                recognition.onend = () => { micButton.classList.remove('active'); };
-            } else { showError("Sorry, your browser does not support voice recognition."); }
-        }
+                    recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
+                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); setReadyState(); };
+                    recognition.onend = () => { micButton.classList.remove('active'); };
+                } else {
+                    showError("Sorry, your browser does not support voice recognition.");
+                    return; // Stop if no recognition
+                }
+                
+                // 3. Set state to initialized
+                isInitialized = true;
+                setReadyState();
+                console.log("✅ System Initialized and Audio Unlocked.");
 
-        // --- AUDIO UNLOCK & CONTROL ---
-        function unlockAudio() {
-            if (audioContext && audioContext.state === 'running') return;
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
+            } catch (error) {
+                console.error("🔴 Initialization failed:", error);
+                showError("Could not initialize the assistant.");
             }
-            console.log("Audio Context Unlocked.");
         }
 
-        async function playAudio(audioBlob) {
-            return new Promise(async (resolve, reject) => {
-                if (!audioContext) return reject("Audio context not ready");
-                try {
-                    const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
-                    const source = audioContext.createBufferSource();
-                    source.buffer = audioBuffer;
-                    source.connect(audioContext.destination);
-                    source.onended = resolve;
-                    source.start(0);
-                } catch (decodeError) { reject(decodeError); }
-            });
-        }
-        
         // --- 🕹️ MAIN CONTROL LOGIC (SIMPLIFIED) ---
         micButton.addEventListener('click', () => {
-            unlockAudio();
+            if (isBusy) return; // Do nothing if busy
+
+            if (!isInitialized) {
+                initializeApp();
+                return;
+            }
+            
             if (recognition) {
                 recognition.start();
             }
         });
 
-        function resetUI() {
+        function setReadyState() {
+            isBusy = false;
             micButton.disabled = false;
             voiceCircle.classList.remove('active');
             micButton.classList.remove('active');
             updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION (MASTER CONTROLLER) ---
+        // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that.");
-                resetUI();
+                setReadyState();
                 return;
             }
             
-            micButton.disabled = true; // MOST IMPORTANT: Disable button at the start
+            isBusy = true;
+            micButton.disabled = true;
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -261,8 +267,7 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                // MOST IMPORTANT: Re-enable button only after everything is finished.
-                resetUI();
+                setReadyState();
             }
         }
 
@@ -282,10 +287,10 @@
 
         // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
         async function speakAndPlay(text) {
-            if (!text || !text.trim()) return; // Nothing to say
+            if (!text || !text.trim()) return;
             
             updateStatus("Speaking...");
-            micButton.classList.add('active'); // Show activity
+            micButton.classList.add('active');
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -299,7 +304,19 @@
                 if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
 
                 const audioBlob = await response.blob();
-                await playAudio(audioBlob);
+                
+                // Play audio using the unlocked context
+                const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                
+                // Use a promise to wait for the audio to end
+                await new Promise(resolve => {
+                    source.onended = resolve;
+                    source.start(0);
+                });
+                
                 console.log("✅ Speech finished successfully.");
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
@@ -316,15 +333,6 @@
         function showError(message) {
             updateStatus(message, true);
         }
-
-        // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', initializeSpeechRecognition);
-        window.addEventListener('beforeunload', (e) => {
-            if (micButton.disabled) {
-                e.preventDefault();
-                e.returnValue = 'An operation is in progress, are you sure you want to leave?';
-            }
-        });
     </script>
 </body>
 </html>
