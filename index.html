@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V8.0 - No Interrupt)</title>
+    <title>Lhuhi - Assistant (V9.0 - No Interrupt)</title>
     
     <style>
         :root {
@@ -74,6 +74,7 @@
             transform: scale(1.05);
         }
         
+        /* This style will apply when the button is disabled */
         #mic-button:disabled {
             cursor: not-allowed;
             opacity: 0.5;
@@ -132,7 +133,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
+        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk'; // New API Key
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         
@@ -195,7 +196,7 @@
             });
         }
         
-        // --- 🕹️ MAIN CONTROL LOGIC ---
+        // --- 🕹️ MAIN CONTROL LOGIC (SIMPLIFIED) ---
         micButton.addEventListener('click', () => {
             unlockAudio();
             if (recognition) {
@@ -210,7 +211,7 @@
             updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION ---
+        // --- 🧠 GEMINI AI INTEGRATION (MASTER CONTROLLER) ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that.");
@@ -218,7 +219,7 @@
                 return;
             }
             
-            micButton.disabled = true; // Disable button during processing
+            micButton.disabled = true; // MOST IMPORTANT: Disable button at the start
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -260,8 +261,7 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                // IMPORTANT: The UI is now reset only after the entire chain,
-                // including speech, is complete.
+                // MOST IMPORTANT: Re-enable button only after everything is finished.
                 resetUI();
             }
         }
@@ -282,11 +282,10 @@
 
         // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
         async function speakAndPlay(text) {
-            if (!text || !text.trim()) {
-                return; // Nothing to say, so just return
-            }
+            if (!text || !text.trim()) return; // Nothing to say
+            
             updateStatus("Speaking...");
-            micButton.classList.add('active');
+            micButton.classList.add('active'); // Show activity
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -321,7 +320,7 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', initializeSpeechRecognition);
         window.addEventListener('beforeunload', (e) => {
-            if (micButton.disabled) { // A simple check if we are processing
+            if (micButton.disabled) {
                 e.preventDefault();
                 e.returnValue = 'An operation is in progress, are you sure you want to leave?';
             }
