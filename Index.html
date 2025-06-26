@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Assistant</title>
+    
+    <style>
+        /* CSS for Styling and Animation */
+        body {
+            background-color: #000000;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        .circle {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, #007bff, #0056b3);
+            border-radius: 50%;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 0 20px #007bff, 0 0 40px #007bff, 0 0 60px #007bff;
+        }
+
+        /* Class to add when assistant is listening or speaking */
+        .circle.active {
+            transform: scale(1.2);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 20px #007bff, 0 0 40px #007bff, 0 0 60px #007bff;
+            }
+            50% {
+                box-shadow: 0 0 30px #00aaff, 0 0 60px #00aaff, 0 0 90px #00aaff;
+            }
+            100% {
+                box-shadow: 0 0 20px #007bff, 0 0 40px #007bff, 0 0 60px #007bff;
+            }
+        }
+
+        .mic-container {
+            position: absolute;
+            bottom: 50px;
+        }
+
+        #mic-button {
+            background: none;
+            border: 2px solid #007bff;
+            border-radius: 50%;
+            padding: 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #mic-button:hover {
+            background-color: #007bff30;
+        }
+
+        #mic-button img {
+            width: 40px;
+            height: 40px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Elements -->
+    <div class="circle" id="voice-circle"></div>
+    <div class="mic-container">
+        <button id="mic-button">
+            <!-- Make sure you have a 'mic-icon.png' in the same folder -->
+            <img src="mic-icon.png" alt="Microphone">
+        </button>
+    </div>
+
+    <script>
+        // JavaScript for All Functionality
+
+        const micButton = document.getElementById('mic-button');
+        const voiceCircle = document.getElementById('voice-circle');
+
+        // --- Step 1: Voice Input (Speech-to-Text) ---
+        // Check if the browser supports the Web Speech API
+        if ('webkitSpeechRecognition' in window) {
+            const recognition = new webkitSpeechRecognition();
+            recognition.continuous = false; // Stop listening after user finishes speaking
+            recognition.lang = 'hi-IN';     // Set language to Hindi (India)
+
+            micButton.addEventListener('click', () => {
+                voiceCircle.classList.add('active'); // Start animation
+                recognition.start();
+            });
+
+            // When the API gets a result
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                console.log('User said:', transcript);
+                sendToGemini(transcript); // Send the recognized text to Gemini
+            };
+
+            // When listening ends
+            recognition.onend = () => {
+                // Keep animation running while Gemini processes
+                // voiceCircle.classList.remove('active'); 
+            };
+
+            // If there's an error
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                voiceCircle.classList.remove('active'); // Stop animation on error
+                speak("Maaf kijiye, main sun nahi paya.");
+            };
+
+        } else {
+            alert('Sorry, your browser does not support voice recognition.');
+        }
+
+        // --- Step 2: Gemini AI Integration ---
+        async function sendToGemini(userQuery) {
+            // !!! IMPORTANT: REPLACE WITH YOUR OWN SECURE API KEY !!!
+            const API_KEY = 'YOUR_GEMINI_API_KEY'; 
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`;
+            
+            // This is the prompt that tells Gemini how to behave
+            const prompt = `
+                You are a voice assistant. Your task is to analyze the user's command and respond in a specific JSON format.
+                The user's command is: "${userQuery}".
+
+                Analyze this command and determine the user's intent. The possible intents are "search", "open_app", "write", or "general_query".
+                
+                Your response MUST be a JSON object with two keys: "action" and "data".
+
+                - If the user wants to search something on Google:
+                  Action should be "search". Data should be the search query.
+                  Example: "Google par Taj Mahal search karo" -> {"action": "search", "data": "Taj Mahal"}
+
+                - If the user wants to open an application:
+                  Action should be "open_app". Data should be the name of the app.
+                  Example: "YouTube kholo" -> {"action": "open_app", "data": "YouTube"}
+
+                - If the user wants you to write down some text:
+                  Action should be "write". Data should be the text to be written.
+                  Example: "likho ki meeting kal subah 10 baje hai" -> {"action": "write", "data": "meeting kal subah 10 baje hai"}
+
+                - If it is a general question or a casual conversation:
+                  Action should be "general_query". Data should be a helpful, conversational answer to the user's query.
+                  Example: "duniya ka sabse uncha pahad kaunsa hai" -> {"action": "general_query", "data": "Duniya ka sabse uncha pahad Mount Everest hai, jo Nepal mein sthit hai."}
+
+                Based on the user command "${userQuery}", provide ONLY the JSON object.
+            `;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const geminiResponseText = result.candidates[0].content.parts[0].text;
+                
+                // Clean the response to ensure it's valid JSON
+                const cleanJsonString = geminiResponseText.replace(/```json\n|\n```/g, '').trim();
+                
+                const actionObject = JSON.parse(cleanJsonString);
+                console.log('Gemini action plan:', actionObject);
+                performAction(actionObject); // Execute the action
+
+            } catch (error) {
+                console.error("Error communicating with Gemini or parsing JSON:", error);
+                speak("Kuchh gadbad ho gayi hai. Kripya dobara koshish karein.");
+                voiceCircle.classList.remove('active'); // Stop animation on error
+            }
+        }
+
+        // --- Step 3: Action Processing ---
+        function performAction(actionObject) {
+            const { action, data } = actionObject;
+
+            switch (action) {
+                case 'search':
+                    speak(`Theek hai, ${data} ko Google par search kar raha hun.`);
+                    window.open(`https://www.google.com/search?q=${encodeURIComponent(data)}`, '_blank');
+                    break;
+                    
+                case 'open_app':
+                    // Opening apps is not possible from a web browser due to security restrictions.
+                    // This functionality would require a native mobile app.
+                    speak(`Website se app open karna possible nahi hai. Agar yeh ek mobile app hota, to main ${data} zaroor open kar deta.`);
+                    break;
+
+                case 'write':
+                    // We can copy the text to the user's clipboard
+                    navigator.clipboard.writeText(data).then(() => {
+                        speak(`Maine, "${data}", ko aapke clipboard par copy kar diya hai.`);
+                    }).catch(err => {
+                        console.error('Could not copy text: ', err);
+                        speak("Maaf kijiye, main text copy nahi kar paaya.");
+                    });
+                    break;
+                    
+                case 'general_query':
+                    speak(data); // Speak the answer from Gemini
+                    break;
+
+                default:
+                    speak("Mujhe samajh nahi aaya, kya aap dobara koshish kar sakte hain?");
+            }
+        }
+
+        // --- Step 4: Voice Output (Text-to-Speech) ---
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'hi-IN'; // Speak in Hindi
+            utterance.rate = 1.0;     // Speaking speed
+            utterance.pitch = 1.0;    // Voice pitch
+
+            // Start animation when speaking starts
+            utterance.onstart = () => {
+                voiceCircle.classList.add('active');
+            };
+
+            // Stop animation when speaking ends
+            utterance.onend = () => {
+                voiceCircle.classList.remove('active');
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
+    </script>
+</body>
+  </html
