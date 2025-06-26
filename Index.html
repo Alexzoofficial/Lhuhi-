@@ -1,3 +1,122 @@
+// ===================================================================================
+// FILE 1: .env (Is file mein neeche ka text copy-paste karein)
+// ===================================================================================
+
+# Yahan apni real aur secret API keys daalein.
+# Shuru ya aakhir mein koi quote ya space na lagayein.
+
+GEMINI_API_KEY="AIzaSy... (Aapki Nayi Google Gemini Key Yahan Daalein)"
+ELEVENLABS_API_KEY="sk_... (Aapki Nayi ElevenLabs Key Yahan Daalein)"
+SERPAPI_API_KEY="... (Aapki Nayi SerpAPI Key Yahan Daalein)"
+
+
+
+// ===================================================================================
+// FILE 2: server.js (Is file mein neeche ka code copy-paste karein)
+// ===================================================================================
+
+require('dotenv').config();
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+
+const app = express();
+app.use(cors()); // Frontend aur backend ko communicate karne ki permission deta hai
+app.use(express.json());
+
+const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj'; // Aapki voice ID
+
+// Yeh endpoint frontend se command receive karega
+app.post('/ask', async (req, res) => {
+    const { query } = req.body;
+
+    if (!query) {
+        return res.status(400).json({ error: 'Query is required' });
+    }
+
+    try {
+        // Step 1: Gemini se command ka matlab samjho
+        const geminiPrompt = `
+            Analyze the user's command: "${query}". Respond ONLY with a JSON object.
+            Possible intents: "live_search", "open_website", "general_query".
+            
+            - For real-time info: {"action": "live_search", "data": "search query"}
+            - To open a website: {"action": "open_website", "data": "youtube.com"}
+            - For general conversation: {"action": "general_query", "data": "The query itself"}
+
+            User command: "${query}".
+        `;
+        
+        const geminiResponse = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            { contents: [{ parts: [{ text: geminiPrompt }] }] }
+        );
+
+        const geminiResultText = geminiResponse.data.candidates[0].content.parts[0].text;
+        const actionObject = JSON.parse(geminiResultText.replace(/```json\n|\n```/g, ''));
+        
+        let finalTextToSpeak = "";
+
+        // Step 2: Action ke hisaab se kaam karo
+        if (actionObject.action === 'live_search') {
+            const serpApiResponse = await axios.get(`https://serpapi.com/search.json`, {
+                params: { q: actionObject.data, api_key: process.env.SERPAPI_API_KEY }
+            });
+            finalTextToSpeak = serpApiResponse.data.answer_box?.answer || serpApiResponse.data.organic_results?.[0]?.snippet || "Mujhe iska jawab nahi mil paaya.";
+        
+        } else if (actionObject.action === 'open_website') {
+             // Frontend ko website kholne ka command bhejo
+             return res.json({ action: 'open_website', url: `https://${actionObject.data}` });
+        
+        } else { // general_query
+            const generalQueryPrompt = `You are Lhuhi, a helpful voice assistant. Give a concise and friendly answer to this question: "${actionObject.data}"`;
+            const generalResponse = await axios.post(
+                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                 { contents: [{ parts: [{ text: generalQueryPrompt }] }] }
+            );
+            finalTextToSpeak = generalResponse.data.candidates[0].content.parts[0].text;
+        }
+
+        // Step 3: ElevenLabs se Audio Stream karo (instant response ke liye)
+        const elevenLabsResponse = await axios.post(
+            `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`,
+            {
+                text: finalTextToSpeak,
+                model_id: 'eleven_multilingual_v2',
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            },
+            {
+                headers: {
+                    'Accept': 'audio/mpeg',
+                    'xi-api-key': process.env.ELEVENLABS_API_KEY,
+                    'Content-Type': 'application/json',
+                },
+                responseType: 'stream'
+            }
+        );
+        
+        // Audio stream ko seedha frontend ko bhej do
+        res.setHeader('Content-Type', 'audio/mpeg');
+        elevenLabsResponse.data.pipe(res);
+
+    } catch (error) {
+        console.error('Error:', error.message);
+        res.status(500).json({ error: 'Server mein kuchh gadbad ho gayi hai.' });
+    }
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`✅ Lhuhi ka server http://localhost:${PORT} par chal raha hai`);
+});
+
+
+
+
+// ===================================================================================
+// FILE 3: index.html (Is file mein neeche ka code copy-paste karein)
+// ===================================================================================
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,9 +129,10 @@
         .circle.active { transform: scale(1.2); animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 25px #007bff; } 50% { box-shadow: 0 0 50px #00aaff; } 100% { box-shadow: 0 0 25px #007bff; } }
         .mic-container { position: absolute; bottom: 40px; }
-        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s; }
+        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0px 5px 15px rgba(0, 123, 255, 0.5); }
+        #mic-button:hover { transform: scale(1.1); }
         #mic-icon { width: 50px; height: 50px; display: block; }
-        #status { position: absolute; top: 40px; color: #888; font-size: 18px; text-align: center; padding: 0 20px;}
+        #status { position: absolute; top: 40px; color: #aaa; font-size: 18px; text-align: center; padding: 0 20px; }
     </style>
 </head>
 <body>
@@ -31,9 +151,10 @@
         const statusDiv = document.getElementById('status');
         
         const micOnIcon = "https://img.icons8.com/ios-filled/100/microphone.png";
-        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/multiply.png";
+        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/multiply.png"; // Cross icon
 
         let isListening = false;
+        let audioContext;
         let recognition;
 
         if ('webkitSpeechRecognition' in window) {
@@ -47,7 +168,7 @@
                 const transcript = event.results[0][0].transcript;
                 sendQueryToBackend(transcript);
             };
-        } else { alert('Sorry, speech recognition is not supported in this browser.'); }
+        } else { alert('Sorry, your browser does not support speech recognition.'); }
 
         micButton.addEventListener('click', () => { isListening ? recognition.stop() : recognition.start(); });
 
@@ -56,11 +177,17 @@
             statusDiv.innerText = `Thinking...`;
 
             try {
-                // Hamara serverless function is URL par milega
-                const response = await fetch('/.netlify/functions/ask', {
+                // Backend server ko call karo
+                const response = await fetch('http://localhost:3000/ask', {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: query })
                 });
+                
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error);
+                }
 
                 const contentType = response.headers.get("content-type");
 
@@ -70,28 +197,29 @@
                         statusDiv.innerText = `Opening ${command.url}...`;
                         window.open(command.url, '_blank');
                         voiceCircle.classList.remove('active');
-                    } else if (command.error) {
-                        throw new Error(command.error);
                     }
                 } else if (contentType && contentType.indexOf("audio/mpeg") !== -1) {
-                    // Audio response ko handle karna
-                    const audioBlob = await response.blob();
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(audioUrl);
-                    audio.play();
+                    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const audioBuffer = await response.arrayBuffer();
+                    const audioSource = audioContext.createBufferSource();
                     
-                    statusDiv.innerText = "Lhuhi is speaking...";
-                    audio.onended = () => {
-                        statusDiv.innerText = "Click the mic to speak";
-                        voiceCircle.classList.remove('active');
-                    };
+                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                        audioSource.buffer = buffer;
+                        audioSource.connect(audioContext.destination);
+                        audioSource.start(0);
+                        statusDiv.innerText = "Lhuhi is speaking...";
+                        
+                        audioSource.onended = () => {
+                           statusDiv.innerText = "Click the mic to speak";
+                           voiceCircle.classList.remove('active');
+                        }
+                    });
                 } else {
                      throw new Error("Unknown response from server.");
                 }
-
             } catch (error) {
                 console.error('Error:', error);
-                statusDiv.innerText = "Error! Could not connect to the assistant.";
+                statusDiv.innerText = "Error! " + error.message;
                 voiceCircle.classList.remove('active');
             }
         }
