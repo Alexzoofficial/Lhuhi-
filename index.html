@@ -167,7 +167,8 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        // IMPORTANT: Replace these with your own API keys
+        // IMPORTANT: Neeche di gayi API keys aapke dwara di gayi hain.
+        // Agar yeh kaam na karein, to kripya apni valid keys daalein.
         const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
@@ -180,8 +181,21 @@
         let recognition;
         let isListening = false;
         let currentAudio = null;
-        let conversationHistory = [];
         let isProcessing = false;
+        
+        // --- 🧠 AI CONVERSATION HISTORY & SYSTEM PROMPT ---
+        // Yahan hum AI ko shuruaat mein hi nirdesh de rahe hain.
+        let conversationHistory = [
+            {
+                role: 'user',
+                parts: [{ text: "System Instruction: You are Lhuhi, an advanced AI assistant. You MUST respond in the exact same language as the user's last query. For example, if the user asks a question in Hindi, you MUST reply in Hindi. If they ask in English, you MUST reply in English. Keep your answers conversational." }]
+            },
+            {
+                role: 'model',
+                parts: [{ text: "ठीक है, मैं समझ गया। मैं उपयोगकर्ता के प्रश्न की भाषा में ही जवाब दूँगा।" }]
+            }
+        ];
+
 
         // --- 🎤 SPEECH RECOGNITION SETUP ---
         function initializeSpeechRecognition() {
@@ -189,7 +203,8 @@
                 recognition = new webkitSpeechRecognition();
                 recognition.continuous = false;
                 recognition.interimResults = false;
-                recognition.lang = 'en-us';
+                // Hindi bhasha ko prathmikta dene ke liye setting
+                recognition.lang = 'hi-IN';
 
                 recognition.onstart = () => {
                     isListening = true;
@@ -228,7 +243,7 @@
         function toggleListening() {
             if (isProcessing) return;
             
-            // Interrupt current speech if playing
+            // Agar AI bol raha hai to use rokne ke liye
             if (currentAudio) {
                 console.log("🚫 Interrupting AI speech.");
                 currentAudio.pause();
@@ -276,12 +291,12 @@
 
             voiceCircle.classList.add('active');
 
-            // Add user's query to history
+            // User ka sawal history mein jodna
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
 
-            // Keep conversation history manageable
-            if (conversationHistory.length > 10) {
-                conversationHistory = conversationHistory.slice(-10);
+            // Baat-cheet ki history ko seemit rakhna
+            if (conversationHistory.length > 12) { // 2 system messages + 5 user/model pairs
+                conversationHistory = [conversationHistory[0], conversationHistory[1], ...conversationHistory.slice(-10)];
             }
 
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
@@ -313,7 +328,7 @@
 
                 const geminiResponseText = result.candidates[0].content.parts[0].text;
                 
-                // Add model's response to history
+                // AI ka jawab history mein jodna
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
                 
                 console.log("🤖 Gemini responded:", geminiResponseText);
@@ -348,7 +363,7 @@
                     },
                     body: JSON.stringify({
                         text: text, 
-                        model_id: 'eleven_multilingual_v2',
+                        model_id: 'eleven_multilingual_v2', // Yeh model Hindi aur English dono support karta hai
                         voice_settings: { 
                             stability: 0.55, 
                             similarity_boost: 0.75,
@@ -413,13 +428,6 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             initializeSpeechRecognition();
-            
-            // Add click sound effect
-            micButton.addEventListener('mousedown', () => {
-                const clickSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3');
-                clickSound.volume = 0.3;
-                clickSound.play().catch(e => console.log("Could not play click sound:", e));
-            });
         });
 
         // Prevent accidental page leave during interaction
