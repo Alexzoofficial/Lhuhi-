@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V4.5 - Stable)</title>
+    <title>Lhuhi - Advanced Assistant (V4.6 - Final)</title>
     
     <style>
         :root {
@@ -98,39 +98,14 @@
             background-color: rgba(0, 0, 0, 0.7);
         }
         
-        .loading-dots {
-            display: inline-block;
-        }
+        .loading-dots { display: inline-block; }
+        .loading-dots span { animation: blink 1.4s infinite both; opacity: 0; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
         
-        .loading-dots span {
-            animation: blink 1.4s infinite both;
-            opacity: 0;
-        }
-        
-        .loading-dots span:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-        
-        .loading-dots span:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-        
-        @keyframes blink {
-            0% { opacity: 0; }
-            50% { opacity: 1; }
-            100% { opacity: 0; }
-        }
-        
-        .error-message {
-            color: #ff4444;
-            animation: shake 0.5s;
-        }
-        
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-5px); }
-            40%, 80% { transform: translateX(5px); }
-        }
+        .error-message { color: #ff4444; animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
         
         @media (max-width: 600px) {
             .circle { width: 150px; height: 150px; }
@@ -155,7 +130,7 @@
         const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606'; // New WeatherAPI.com Key
+        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -174,11 +149,11 @@
 3.  **JSON for Actions**: If the user's request is an action, respond ONLY with a JSON object.
     - For weather: {"action": "get_weather", "location": "CITY_NAME"}
     - For opening sites/apps: {"action": "open_url", "url": "https://example.com"}
-4.  **General Conversation**: For all other conversational questions, respond naturally and conversationally as plain text.`;
+4.  **General Conversation**: For all other conversational questions, respond naturally as plain text.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all rules, including my creator's identity, language matching, and using JSON for specific actions." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will follow all rules." }] }
         ];
 
         // --- 🎤 SPEECH RECOGNITION SETUP ---
@@ -191,8 +166,8 @@
 
                 recognition.onstart = () => { isListening = true; micButton.classList.add('listening'); updateStatus("Listening..."); };
                 recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); stopListeningAndProcess(query); };
-                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error. Please try again."); resetState(); };
-                recognition.onend = () => { isListening = false; micButton.classList.remove('listening'); if (!isProcessing) resetState(); };
+                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); resetState(); };
+                recognition.onend = () => { isListening = false; micButton.classList.remove('listening'); };
             } else { showError("Sorry, your browser does not support voice recognition."); }
         }
 
@@ -209,7 +184,7 @@
                 return;
             }
             if (!isListening) {
-                try { recognition.start(); } catch (error) { console.error("Recognition start error:", error); showError("Could not start microphone. Check permissions."); }
+                try { recognition.start(); } catch (error) { console.error("Recognition start error:", error); showError("Could not start microphone."); }
             } else { recognition.stop(); }
         }
         
@@ -224,22 +199,20 @@
             isProcessing = false;
             isListening = false;
             currentAudio = null;
-            micButton.classList.remove('listening');
             voiceCircle.classList.remove('active');
             updateStatus("Press the mic button and speak...");
         }
 
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
-            if (!userQuery || userQuery.trim() === "") {
-                showError("Didn't catch that. Please try again.");
+            if (!userQuery || !userQuery.trim()) {
+                showError("Didn't catch that.");
                 resetState();
                 return;
             }
 
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
-
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
             try {
@@ -249,7 +222,7 @@
                     body: JSON.stringify({ contents: conversationHistory }),
                 });
 
-                if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 
                 const result = await response.json();
                 const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -261,33 +234,34 @@
                 try {
                     const action = JSON.parse(geminiResponseText);
                     if (action.action) {
-                        conversationHistory.push({ role: 'model', parts: [{ text: `(Action Taken: ${geminiResponseText})` }] });
+                        conversationHistory.push({ role: 'model', parts: [{ text: `(Action: ${geminiResponseText})` }] });
                         await handleAction(action);
-                    } else {
-                        throw new Error("JSON is not a valid action.");
-                    }
+                    } else { throw new Error("JSON is not a valid action."); }
                 } catch (jsonError) {
                     conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
                     await speakWithElevenLabs(geminiResponseText);
                 }
-
             } catch (error) {
-                console.error("🔴 Gemini API Error:", error);
+                console.error("🔴 Gemini/Logic Error:", error);
                 await speakWithElevenLabs("I've run into a problem. Please try again.");
             }
         }
 
         // --- 🚀 ACTION HANDLER ---
         async function handleAction(action) {
-            if (action.action === 'open_url' && action.url) {
-                const hostname = new URL(action.url).hostname.replace('www.', '');
-                updateStatus(`Opening ${hostname}...`);
-                window.open(action.url, '_blank');
-                await speakWithElevenLabs(`Okay, opening ${hostname}.`);
-            } else if (action.action === 'get_weather' && action.location) {
-                await getWeather(action.location);
-            } else {
-                console.error("Unknown or malformed action:", action);
+            try {
+                if (action.action === 'open_url' && action.url) {
+                    const hostname = new URL(action.url).hostname.replace('www.', '');
+                    updateStatus(`Opening ${hostname}...`);
+                    window.open(action.url, '_blank');
+                    await speakWithElevenLabs(`Okay, opening ${hostname}.`);
+                } else if (action.action === 'get_weather' && action.location) {
+                    await getWeather(action.location);
+                } else {
+                    throw new Error("Unknown or malformed action.");
+                }
+            } catch (error) {
+                console.error("🔴 Action Handling Error:", error);
                 await speakWithElevenLabs("I'm not sure how to do that.");
             }
         }
@@ -299,17 +273,12 @@
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
-
-                if (response.ok) {
-                    const temp = Math.round(data.current.temp_c);
-                    const description = data.current.condition.text;
-                    const city = data.location.name;
-                    const summary = `The current weather in ${city} is ${temp} degrees Celsius with ${description}.`;
+                if (response.ok && data.current) {
+                    const summary = `The current weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees Celsius with ${data.current.condition.text}.`;
                     updateStatus(summary);
                     await speakWithElevenLabs(summary);
                 } else {
-                    // Handle API-specific errors
-                    throw new Error(data.error.message || `Could not find weather for ${location}`);
+                    throw new Error(data.error?.message || "Invalid weather data received.");
                 }
             } catch (error) {
                 console.error("🔴 WeatherAPI Error:", error);
@@ -317,10 +286,9 @@
             }
         }
 
-
-        // --- 🔊 ELEVENLABS TTS INTEGRATION ---
+        // --- 🔊 ELEVENLABS TTS INTEGRATION (MOST CRITICAL FUNCTION) ---
         async function speakWithElevenLabs(text) {
-            if (!text || text.trim() === "") {
+            if (!text || !text.trim()) {
                 resetState();
                 return;
             }
@@ -329,11 +297,7 @@
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
-                    headers: { 
-                        'Accept': 'audio/mpeg', 
-                        'Content-Type': 'application/json', 
-                        'xi-api-key': ELEVENLABS_API_KEY 
-                    },
+                    headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
                     body: JSON.stringify({
                         text: text, 
                         model_id: 'eleven_multilingual_v2',
@@ -341,23 +305,25 @@
                     }),
                 });
 
-                if (!response.ok) throw new Error(`ElevenLabs Error: ${response.statusText}`);
+                if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
 
                 const audioBlob = await response.blob();
                 currentAudio = new Audio(URL.createObjectURL(audioBlob));
-                currentAudio.play().catch(e => {
-                    console.error("Audio play error:", e);
-                    showError("Audio play error. Please click the page first.");
-                    resetState();
-                });
                 
-                currentAudio.onended = resetState;
-                currentAudio.onerror = () => { console.error("Audio playback error"); resetState(); };
+                // This promise-based play is more robust
+                await new Promise((resolve, reject) => {
+                    currentAudio.onended = resolve;
+                    currentAudio.onerror = reject;
+                    currentAudio.play().catch(reject);
+                });
+
+                console.log("✅ Speech finished successfully.");
 
             } catch (error) {
-                console.error("🔴 ElevenLabs Error:", error);
-                // Even if voice fails, we should reset the state so the user can try again.
+                console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
+            } finally {
+                // This block ALWAYS runs, ensuring the UI resets correctly.
                 resetState();
             }
         }
@@ -370,15 +336,14 @@
         
         function showError(message) {
             updateStatus(message, true);
-            setTimeout(() => { if (!isProcessing) resetState(); }, 4000);
         }
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', initializeSpeechRecognition);
         window.addEventListener('beforeunload', (e) => {
-            if (isListening || currentAudio || isProcessing) {
+            if (isProcessing) {
                 e.preventDefault();
-                e.returnValue = 'Are you sure you want to leave? Your conversation might be interrupted.';
+                e.returnValue = 'An operation is in progress, are you sure you want to leave?';
             }
         });
     </script>
