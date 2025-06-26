@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lhuhi - AI Voice Assistant</title>
+    <style>
+        body { background-color: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
+        .circle { width: 200px; height: 200px; background: radial-gradient(circle, #007bff, #0056b3); border-radius: 50%; transition: all 0.3s ease; box-shadow: 0 0 20px #007bff, 0 0 40px #007bff; }
+        .circle.active { transform: scale(1.2); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 25px #007bff; } 50% { box-shadow: 0 0 50px #00aaff; } 100% { box-shadow: 0 0 25px #007bff; } }
+        .mic-container { position: absolute; bottom: 40px; }
+        #mic-button { background-color: #fff; border: none; border-radius: 50%; padding: 20px; cursor: pointer; transition: transform 0.2s; }
+        #mic-icon { width: 50px; height: 50px; display: block; }
+        #status { position: absolute; top: 40px; color: #888; font-size: 18px; text-align: center; padding: 0 20px;}
+    </style>
+</head>
+<body>
+    <div id="status">Click the mic to speak</div>
+    <div class="circle" id="voice-circle"></div>
+    <div class="mic-container">
+        <button id="mic-button">
+            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
+        </button>
+    </div>
+
+    <script>
+        const micButton = document.getElementById('mic-button');
+        const micIcon = document.getElementById('mic-icon');
+        const voiceCircle = document.getElementById('voice-circle');
+        const statusDiv = document.getElementById('status');
+        
+        const micOnIcon = "https://img.icons8.com/ios-filled/100/microphone.png";
+        const micOffIcon = "https://img.icons8.com/ios-glyphs/90/multiply.png";
+
+        let isListening = false;
+        let recognition;
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'hi-IN';
+
+            recognition.onstart = () => { isListening = true; statusDiv.innerText = "Listening..."; micIcon.src = micOffIcon; voiceCircle.classList.add('active'); };
+            recognition.onend = () => { isListening = false; statusDiv.innerText = "Processing..."; micIcon.src = micOnIcon; };
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                sendQueryToBackend(transcript);
+            };
+        } else { alert('Sorry, speech recognition is not supported in this browser.'); }
+
+        micButton.addEventListener('click', () => { isListening ? recognition.stop() : recognition.start(); });
+
+        async function sendQueryToBackend(query) {
+            voiceCircle.classList.add('active');
+            statusDiv.innerText = `Thinking...`;
+
+            try {
+                // Hamara serverless function is URL par milega
+                const response = await fetch('/.netlify/functions/ask', {
+                    method: 'POST',
+                    body: JSON.stringify({ query: query })
+                });
+
+                const contentType = response.headers.get("content-type");
+
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const command = await response.json();
+                    if (command.action === 'open_website') {
+                        statusDiv.innerText = `Opening ${command.url}...`;
+                        window.open(command.url, '_blank');
+                        voiceCircle.classList.remove('active');
+                    } else if (command.error) {
+                        throw new Error(command.error);
+                    }
+                } else if (contentType && contentType.indexOf("audio/mpeg") !== -1) {
+                    // Audio response ko handle karna
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    
+                    statusDiv.innerText = "Lhuhi is speaking...";
+                    audio.onended = () => {
+                        statusDiv.innerText = "Click the mic to speak";
+                        voiceCircle.classList.remove('active');
+                    };
+                } else {
+                     throw new Error("Unknown response from server.");
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.innerText = "Error! Could not connect to the assistant.";
+                voiceCircle.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
