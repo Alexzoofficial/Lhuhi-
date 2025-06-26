@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V4.7 - Final & Stable)</title>
+    <title>Lhuhi - Advanced Assistant (V5.0 - Simplified & Stable)</title>
     
     <style>
         :root {
@@ -130,7 +130,7 @@
         const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        // Weather API has been removed for stability.
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -142,13 +142,11 @@
         let currentAudio = null;
         let isProcessing = false;
 
-        // --- 🧠 AI SYSTEM PROMPT & CONVERSATION HISTORY ---
+        // --- 🧠 AI SYSTEM PROMPT (SIMPLIFIED) ---
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. Your primary rules are:
 1.  **Creator Identity**: If asked who created or trained you, you MUST say that 'Alexzo' created and trained you.
 2.  **Language Matching**: You MUST respond in the exact same language as the user's last query.
-3.  **JSON for Actions**: If the user's request is an action, respond ONLY with a JSON object.
-    - For weather: {"action": "get_weather", "location": "CITY_NAME"}
-    - For opening sites/apps: {"action": "open_url", "url": "https://example.com"}
+3.  **JSON for URL Action**: If the user's request is to open a website or app, respond ONLY with a JSON object: {"action": "open_url", "url": "https://example.com"}
 4.  **General Conversation**: For all other questions, respond naturally as plain text.`;
         
         let conversationHistory = [
@@ -175,11 +173,11 @@
         micButton.addEventListener('click', toggleListening);
 
         function toggleListening() {
-            if (isProcessing && !currentAudio) return; // Prevent clicks while thinking
+            if (isProcessing && !currentAudio) return;
             if (currentAudio) {
                 console.log("🚫 Interrupting AI speech.");
                 currentAudio.pause();
-                resetState(); // This will also set currentAudio to null
+                resetState();
                 return;
             }
             if (!isListening) {
@@ -189,7 +187,7 @@
         
         function stopListeningAndProcess(query) {
             if (isListening) recognition.stop();
-            isProcessing = true; // Set processing to true
+            isProcessing = true;
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             analyzeWithGemini(query);
         }
@@ -231,7 +229,7 @@
 
                 try {
                     const action = JSON.parse(geminiResponseText);
-                    if (action.action) {
+                    if (action.action === 'open_url') {
                         conversationHistory.push({ role: 'model', parts: [{ text: `(Action: ${geminiResponseText})` }] });
                         await handleAction(action);
                     } else { throw new Error("JSON is not a valid action."); }
@@ -245,7 +243,7 @@
             }
         }
 
-        // --- 🚀 ACTION HANDLER ---
+        // --- 🚀 ACTION HANDLER (SIMPLIFIED) ---
         async function handleAction(action) {
             try {
                 if (action.action === 'open_url' && action.url) {
@@ -253,8 +251,6 @@
                     updateStatus(`Opening ${hostname}...`);
                     window.open(action.url, '_blank');
                     await speakWithElevenLabs(`Okay, opening ${hostname}.`);
-                } else if (action.action === 'get_weather' && action.location) {
-                    await getWeather(action.location);
                 } else {
                     throw new Error("Unknown or malformed action.");
                 }
@@ -264,26 +260,7 @@
             }
         }
 
-        // --- ☀️ WEATHER FUNCTION ---
-        async function getWeather(location) {
-            updateStatus(`Getting weather for ${location}...`);
-            const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
-            try {
-                const response = await fetch(API_URL);
-                const data = await response.json();
-                if (response.ok && data.current) {
-                    const summary = `The current weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees Celsius with ${data.current.condition.text}.`;
-                    await speakWithElevenLabs(summary);
-                } else {
-                    throw new Error(data.error?.message || "Invalid weather data.");
-                }
-            } catch (error) {
-                console.error("🔴 WeatherAPI Error:", error);
-                await speakWithElevenLabs(`Sorry, I couldn't get the weather. Please check the city name.`);
-            }
-        }
-
-        // --- 🔊 ELEVENLABS TTS INTEGRATION (REWRITTEN FOR STABILITY) ---
+        // --- 🔊 ELEVENLABS TTS INTEGRATION (STABLE VERSION) ---
         async function speakWithElevenLabs(text) {
             if (!text || !text.trim()) {
                 resetState();
@@ -308,7 +285,7 @@
                 const audioBlob = await response.blob();
                 currentAudio = new Audio(URL.createObjectURL(audioBlob));
                 
-                // This promise-based play is the key to waiting for the audio to finish.
+                // This promise ensures the code waits for the audio to finish.
                 await new Promise((resolve, reject) => {
                     currentAudio.onended = resolve;
                     currentAudio.onerror = reject;
@@ -321,7 +298,7 @@
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
             } finally {
-                // This block ALWAYS runs, ensuring the UI resets correctly *after* the audio has finished or failed.
+                // This block ALWAYS runs, ensuring the UI resets correctly *after* audio finishes or fails.
                 resetState();
             }
         }
