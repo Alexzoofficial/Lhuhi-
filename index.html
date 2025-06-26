@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V4)</title>
+    <title>Lhuhi - Advanced Assistant (V4.1)</title>
     
     <style>
         :root {
@@ -132,32 +132,20 @@
             40%, 80% { transform: translateX(5px); }
         }
         
-        /* Responsive adjustments */
         @media (max-width: 600px) {
             .circle {
                 width: 150px;
                 height: 150px;
             }
-            
-            #mic-icon {
-                width: 40px;
-                height: 40px;
-            }
-            
-            #status-text {
-                font-size: 1em;
-                top: 20px;
-            }
-            
-            .mic-container {
-                bottom: 20px;
-            }
+            #mic-icon { width: 40px; height: 40px; }
+            #status-text { font-size: 1em; top: 20px; }
+            .mic-container { bottom: 20px; }
         }
     </style>
 </head>
 <body>
 
-    <div class="container" id="status-text">Mic button dabakar baat karein...</div>
+    <div class="container" id="status-text">Press the mic button and speak...</div>
     <div class="circle" id="voice-circle"></div>
     <div class="container mic-container">
         <button id="mic-button" aria-label="Microphone button">
@@ -167,8 +155,6 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        // IMPORTANT: Neeche di gayi API keys aapke dwara di gayi hain.
-        // Agar yeh kaam na karein, to kripya apni valid keys daalein.
         const GEMINI_API_KEY = 'AIzaSyDeAWuz0GxiaOuF1txKA6jaoj0yplsIAns';
         const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
@@ -182,20 +168,19 @@
         let isListening = false;
         let currentAudio = null;
         let isProcessing = false;
-        
-        // --- 🧠 AI CONVERSATION HISTORY & SYSTEM PROMPT ---
-        // Yahan hum AI ko shuruaat mein hi nirdesh de rahe hain.
-        let conversationHistory = [
-            {
-                role: 'user',
-                parts: [{ text: "System Instruction: You are Lhuhi, an advanced AI assistant. You MUST respond in the exact same language as the user's last query. For example, if the user asks a question in Hindi, you MUST reply in Hindi. If they ask in English, you MUST reply in English. Keep your answers conversational." }]
-            },
-            {
-                role: 'model',
-                parts: [{ text: "ठीक है, मैं समझ गया। मैं उपयोगकर्ता के प्रश्न की भाषा में ही जवाब दूँगा।" }]
-            }
-        ];
 
+        // --- 🧠 AI SYSTEM PROMPT & CONVERSATION HISTORY ---
+        // This initial instruction tells the AI how to behave.
+        const systemInstruction = `You are a helpful AI assistant named Lhuhi. Your primary rules are:
+1.  You MUST respond in the exact same language as the user's last query. For example, if the user asks in Hindi, you MUST reply in Hindi.
+2.  Crucially, if the user asks you to open a website or an application, you must determine the correct URL. Then, you will respond ONLY with a JSON object in this exact format: {"action": "open_url", "url": "THE_URL_HERE"}. 
+3.  For opening applications (e.g., "Open Spotify"), find their official website (e.g., spotify.com) and use that for the URL.
+4.  For all other conversational questions, respond naturally and conversationally without using JSON.`;
+        
+        let conversationHistory = [
+            { role: 'user', parts: [{ text: systemInstruction }] },
+            { role: 'model', parts: [{ text: "Okay, I understand. I will follow these rules. I will detect the user's language and commands, responding with either a natural conversation or a JSON action." }] }
+        ];
 
         // --- 🎤 SPEECH RECOGNITION SETUP ---
         function initializeSpeechRecognition() {
@@ -203,13 +188,12 @@
                 recognition = new webkitSpeechRecognition();
                 recognition.continuous = false;
                 recognition.interimResults = false;
-                // Hindi bhasha ko prathmikta dene ke liye setting
-                recognition.lang = 'hi-IN';
+                recognition.lang = 'en-US'; // Default to English, but it can often detect other languages.
 
                 recognition.onstart = () => {
                     isListening = true;
                     micButton.classList.add('listening');
-                    updateStatus("Sun raha hun...");
+                    updateStatus("Listening...");
                     console.log("🎤 Listening started...");
                 };
 
@@ -229,7 +213,7 @@
                     isListening = false;
                     micButton.classList.remove('listening');
                     if (!currentAudio && !isProcessing) {
-                        updateStatus("Mic button dabakar baat karein...");
+                        updateStatus("Press the mic button and speak...");
                     }
                 };
             } else {
@@ -243,7 +227,6 @@
         function toggleListening() {
             if (isProcessing) return;
             
-            // Agar AI bol raha hai to use rokne ke liye
             if (currentAudio) {
                 console.log("🚫 Interrupting AI speech.");
                 currentAudio.pause();
@@ -269,7 +252,7 @@
                 recognition.stop();
             }
             isProcessing = true;
-            updateStatus("Soch raha hun<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
+            updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             analyzeWithGemini(query);
         }
         
@@ -278,67 +261,76 @@
             isProcessing = false;
             micButton.classList.remove('listening');
             voiceCircle.classList.remove('active');
-            updateStatus("Mic button dabakar baat karein...");
+            updateStatus("Press the mic button and speak...");
         }
 
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || userQuery.trim() === "") {
-                showError("Kuch nahi sunai diya. Phir se koshish karein.");
+                showError("Didn't catch that. Please try again.");
                 resetState();
                 return;
             }
 
             voiceCircle.classList.add('active');
-
-            // User ka sawal history mein jodna
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
 
-            // Baat-cheet ki history ko seemit rakhna
-            if (conversationHistory.length > 12) { // 2 system messages + 5 user/model pairs
+            if (conversationHistory.length > 12) {
                 conversationHistory = [conversationHistory[0], conversationHistory[1], ...conversationHistory.slice(-10)];
             }
 
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
-            console.log("🧠 Sending to Gemini:", userQuery);
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         contents: conversationHistory,
-                        generationConfig: {
-                            temperature: 0.9,
-                            topP: 0.95,
-                            maxOutputTokens: 1024
-                        }
+                        generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 1024 }
                     }),
                 });
 
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
                 
                 const result = await response.json();
                 
-                if (!result.candidates || result.candidates.length === 0) {
-                    throw new Error("No response from Gemini.");
-                }
+                if (!result.candidates || result.candidates.length === 0) throw new Error("No response from Gemini.");
 
                 const geminiResponseText = result.candidates[0].content.parts[0].text;
-                
-                // AI ka jawab history mein jodna
-                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
-                
                 console.log("🤖 Gemini responded:", geminiResponseText);
+
+                // Check if the response is an action command (JSON)
+                try {
+                    const potentialAction = JSON.parse(geminiResponseText);
+                    if (potentialAction.action && potentialAction.url) {
+                        handleAction(potentialAction);
+                        // Add the action to history for context, but don't speak it
+                        conversationHistory.push({ role: 'model', parts: [{ text: `(Performed Action: ${potentialAction.action} on ${potentialAction.url})` }] });
+                        return;
+                    }
+                } catch (e) {
+                    // Not a JSON action, so it's a conversational response.
+                }
+
+                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
                 await speakWithElevenLabs(geminiResponseText);
 
             } catch (error) {
                 console.error("🔴 Gemini API Error:", error);
-                showError("Maaf kijiye, samasya aa rahi hai. Phir se koshish karein.");
+                showError("Sorry, there was a problem with the AI. Please try again.");
                 voiceCircle.classList.remove('active');
                 isProcessing = false;
+            }
+        }
+
+        // --- 🚀 ACTION HANDLER ---
+        function handleAction(action) {
+            if (action.action === 'open_url') {
+                updateStatus(`Opening ${new URL(action.url).hostname}...`);
+                window.open(action.url, '_blank');
+                // Give a verbal confirmation
+                speakWithElevenLabs(`Okay, opening ${new URL(action.url).hostname}`);
             }
         }
 
@@ -349,7 +341,7 @@
                 return;
             }
 
-            updateStatus("Bol raha hun...");
+            updateStatus("Speaking...");
 
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             
@@ -363,13 +355,8 @@
                     },
                     body: JSON.stringify({
                         text: text, 
-                        model_id: 'eleven_multilingual_v2', // Yeh model Hindi aur English dono support karta hai
-                        voice_settings: { 
-                            stability: 0.55, 
-                            similarity_boost: 0.75,
-                            style: 0.5,
-                            speaker_boost: true
-                        },
+                        model_id: 'eleven_multilingual_v2',
+                        voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.5, speaker_boost: true },
                     }),
                 });
 
@@ -379,15 +366,12 @@
                 }
 
                 const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                currentAudio = new Audio(audioUrl);
+                currentAudio = new Audio(URL.createObjectURL(audioBlob));
                 
-                currentAudio.addEventListener('canplaythrough', () => {
-                    currentAudio.play().catch(e => {
-                        console.error("Audio play error:", e);
-                        showError("Audio play error. Please interact with page first.");
-                        resetState();
-                    });
+                currentAudio.play().catch(e => {
+                    console.error("Audio play error:", e);
+                    showError("Audio play error. Please interact with page first.");
+                    resetState();
                 });
                 
                 currentAudio.onended = () => {
@@ -404,7 +388,7 @@
 
             } catch (error) {
                 console.error("🔴 ElevenLabs Error:", error);
-                showError("Awaz mein samasya aa rahi hai.");
+                showError("There was a problem with the voice synthesis.");
                 currentAudio = null;
                 resetState();
             }
@@ -420,7 +404,7 @@
             updateStatus(message, true);
             setTimeout(() => {
                 if (!isListening && !currentAudio && !isProcessing) {
-                    updateStatus("Mic button dabakar baat karein...");
+                    updateStatus("Press the mic button and speak...");
                 }
             }, 3000);
         }
@@ -430,7 +414,6 @@
             initializeSpeechRecognition();
         });
 
-        // Prevent accidental page leave during interaction
         window.addEventListener('beforeunload', (e) => {
             if (isListening || currentAudio || isProcessing) {
                 e.preventDefault();
