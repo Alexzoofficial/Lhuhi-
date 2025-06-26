@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V6.0 - Bulletproof Audio)</title>
+    <title>Lhuhi - Advanced Assistant (V7.0 - Manual Stop)</title>
     
     <style>
         :root {
@@ -74,7 +74,8 @@
             transform: scale(1.05);
         }
         
-        #mic-button.listening {
+        /* 'listening' class will now also be used for 'speaking' to show activity */
+        #mic-button.active {
             border-color: var(--accent-color);
             transform: scale(1.1);
         }
@@ -137,11 +138,9 @@
         const statusText = document.getElementById('status-text');
         
         let recognition;
-        let isListening = false;
-        let isProcessing = false;
-        let audioContext; // Will be created on first user interaction
-        let currentAudioSource; // To allow interruption
-
+        let audioContext;
+        let currentAudioSource = null; // This will now control the state
+        
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. **RULES:**
         1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
@@ -162,10 +161,10 @@
                 recognition.interimResults = false;
                 recognition.lang = 'en-US';
 
-                recognition.onstart = () => { isListening = true; micButton.classList.add('listening'); updateStatus("Listening..."); };
-                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); stopListeningAndProcess(query); };
-                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); resetState(); };
-                recognition.onend = () => { isListening = false; micButton.classList.remove('listening'); };
+                recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
+                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); resetUI(); };
+                recognition.onend = () => { micButton.classList.remove('active'); };
             } else { showError("Sorry, your browser does not support voice recognition."); }
         }
 
@@ -181,10 +180,7 @@
 
         async function playAudio(audioBlob) {
             return new Promise((resolve, reject) => {
-                if (!audioContext) {
-                    console.error("Audio context not initialized");
-                    return reject("Audio context not ready");
-                }
+                if (!audioContext) return reject("Audio context not ready");
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -194,12 +190,10 @@
                         currentAudioSource.connect(audioContext.destination);
                         currentAudioSource.onended = () => {
                             currentAudioSource = null;
-                            resolve();
+                            resolve(); // Resolve the promise when audio finishes
                         };
                         currentAudioSource.start(0);
-                    } catch (decodeError) {
-                        reject(decodeError);
-                    }
+                    } catch (decodeError) { reject(decodeError); }
                 };
                 reader.onerror = reject;
                 reader.readAsArrayBuffer(audioBlob);
@@ -207,33 +201,22 @@
         }
         
         // --- 🕹️ MAIN CONTROL LOGIC ---
-        micButton.addEventListener('click', toggleListening);
-
-        function toggleListening() {
-            unlockAudio(); // Unlock audio on the very first click
-            if (isProcessing) {
-                if(currentAudioSource) {
-                    console.log("🚫 Interrupting AI speech.");
-                    currentAudioSource.stop(); // This will trigger the 'onended' event
-                }
+        micButton.addEventListener('click', () => {
+            unlockAudio();
+            if (currentAudioSource) { // If audio is playing, this button is a STOP button
+                console.log("🚫 Interrupting AI speech by user.");
+                currentAudioSource.stop(); // This will trigger onended, which resolves the promise
+                resetUI(); // Manually reset UI on stop
                 return;
             }
-            if (!isListening) {
-                try { recognition.start(); } catch (error) { console.error("Recognition start error:", error); showError("Could not start microphone."); }
-            } else { recognition.stop(); }
-        }
-        
-        function stopListeningAndProcess(query) {
-            if (isListening) recognition.stop();
-            updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
-            analyzeWithGemini(query);
-        }
-        
-        function resetState() {
-            isProcessing = false;
-            isListening = false;
-            currentAudioSource = null;
+            if (recognition) { // If not speaking, this is a MIC button
+                recognition.start();
+            }
+        });
+
+        function resetUI() {
             voiceCircle.classList.remove('active');
+            micButton.classList.remove('active');
             updateStatus("Press the mic button and speak...");
         }
 
@@ -241,11 +224,11 @@
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that.");
-                resetState();
+                resetUI();
                 return;
             }
 
-            isProcessing = true;
+            updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
@@ -286,10 +269,8 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                // Final reset is handled by the audio player's 'onended' event
-                if (!currentAudioSource) {
-                    resetState();
-                }
+                // IMPORTANT: NO AUTOMATIC RESET HERE.
+                // The UI will only reset when audio finishes or is stopped.
             }
         }
 
@@ -300,10 +281,7 @@
                     const hostname = new URL(action.url).hostname.replace('www.', '');
                     updateStatus(`Opening ${hostname}...`);
                     window.open(action.url, '_blank');
-                    // No speaking here, it's handled by the main function.
-                } else {
-                    throw new Error("Unknown action.");
-                }
+                } else { throw new Error("Unknown action."); }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
                 await speakAndPlay("I'm not sure how to do that.");
@@ -312,7 +290,12 @@
 
         // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
         async function speakAndPlay(text) {
+            if (!text || !text.trim()) {
+                resetUI(); // Reset if there's nothing to say
+                return;
+            }
             updateStatus("Speaking...");
+            micButton.classList.add('active'); // Show active state while speaking
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -331,6 +314,9 @@
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
+            } finally {
+                // THIS IS THE KEY! UI RESETS ONLY AFTER AUDIO FINISHES.
+                resetUI();
             }
         }
         
@@ -347,7 +333,7 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', initializeSpeechRecognition);
         window.addEventListener('beforeunload', (e) => {
-            if (isProcessing) {
+            if (currentAudioSource) {
                 e.preventDefault();
                 e.returnValue = 'An operation is in progress, are you sure you want to leave?';
             }
