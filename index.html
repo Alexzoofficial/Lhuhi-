@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Advanced Assistant (V7.0 - Manual Stop)</title>
+    <title>Lhuhi - Advanced Assistant (V8.0 - No Interrupt)</title>
     
     <style>
         :root {
@@ -70,11 +70,15 @@
             outline: none;
         }
         
-        #mic-button:hover {
+        #mic-button:hover:not(:disabled) {
             transform: scale(1.05);
         }
         
-        /* 'listening' class will now also be used for 'speaking' to show activity */
+        #mic-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
         #mic-button.active {
             border-color: var(--accent-color);
             transform: scale(1.1);
@@ -139,7 +143,6 @@
         
         let recognition;
         let audioContext;
-        let currentAudioSource = null; // This will now control the state
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. **RULES:**
@@ -179,42 +182,29 @@
         }
 
         async function playAudio(audioBlob) {
-            return new Promise((resolve, reject) => {
+            return new Promise(async (resolve, reject) => {
                 if (!audioContext) return reject("Audio context not ready");
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const audioBuffer = await audioContext.decodeAudioData(e.target.result);
-                        currentAudioSource = audioContext.createBufferSource();
-                        currentAudioSource.buffer = audioBuffer;
-                        currentAudioSource.connect(audioContext.destination);
-                        currentAudioSource.onended = () => {
-                            currentAudioSource = null;
-                            resolve(); // Resolve the promise when audio finishes
-                        };
-                        currentAudioSource.start(0);
-                    } catch (decodeError) { reject(decodeError); }
-                };
-                reader.onerror = reject;
-                reader.readAsArrayBuffer(audioBlob);
+                try {
+                    const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+                    source.onended = resolve;
+                    source.start(0);
+                } catch (decodeError) { reject(decodeError); }
             });
         }
         
         // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', () => {
             unlockAudio();
-            if (currentAudioSource) { // If audio is playing, this button is a STOP button
-                console.log("🚫 Interrupting AI speech by user.");
-                currentAudioSource.stop(); // This will trigger onended, which resolves the promise
-                resetUI(); // Manually reset UI on stop
-                return;
-            }
-            if (recognition) { // If not speaking, this is a MIC button
+            if (recognition) {
                 recognition.start();
             }
         });
 
         function resetUI() {
+            micButton.disabled = false;
             voiceCircle.classList.remove('active');
             micButton.classList.remove('active');
             updateStatus("Press the mic button and speak...");
@@ -227,7 +217,8 @@
                 resetUI();
                 return;
             }
-
+            
+            micButton.disabled = true; // Disable button during processing
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -269,8 +260,9 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                // IMPORTANT: NO AUTOMATIC RESET HERE.
-                // The UI will only reset when audio finishes or is stopped.
+                // IMPORTANT: The UI is now reset only after the entire chain,
+                // including speech, is complete.
+                resetUI();
             }
         }
 
@@ -291,11 +283,10 @@
         // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
         async function speakAndPlay(text) {
             if (!text || !text.trim()) {
-                resetUI(); // Reset if there's nothing to say
-                return;
+                return; // Nothing to say, so just return
             }
             updateStatus("Speaking...");
-            micButton.classList.add('active'); // Show active state while speaking
+            micButton.classList.add('active');
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -314,9 +305,6 @@
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
-            } finally {
-                // THIS IS THE KEY! UI RESETS ONLY AFTER AUDIO FINISHES.
-                resetUI();
             }
         }
         
@@ -333,7 +321,7 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', initializeSpeechRecognition);
         window.addEventListener('beforeunload', (e) => {
-            if (currentAudioSource) {
+            if (micButton.disabled) { // A simple check if we are processing
                 e.preventDefault();
                 e.returnValue = 'An operation is in progress, are you sure you want to leave?';
             }
