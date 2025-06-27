@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V17.0 - Web Connected)</title>
+    <title>Lhuhi - Assistant (V17.1 - Intelligent Search)</title>
     
     <style>
         :root {
@@ -136,7 +136,7 @@
         const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
-        const SEARCH_API_KEY = 'SyBNH5G13HzVJgYT2TG2bWpT'; // New Search API Key
+        const SEARCH_API_KEY = 'SyBNH5G13HzVJgYT2TG2bWpT';
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -148,22 +148,22 @@
         let isInitialized = false;
         let isBusy = false;
         
-        // --- 🧠 AI SYSTEM PROMPT ---
-        const systemInstruction = `You are Lhuhi, a helpful AI assistant.
-        **YOUR TASK IS TO DECIDE WHICH ACTION TO TAKE. For actions, respond ONLY with the JSON object.**
-        1.  **Creator**: If asked who created you, respond conversationally.
-        2.  **Language**: All conversational responses must be in the user's language.
-        3.  **Use Your Knowledge First**: For general knowledge, answer directly.
-        4.  **Web Search**: For recent events, news, or real-time information (e.g., "who won the match yesterday?"), use the search action: \`{"action": "search_web", "query": "USER'S QUERY"}\`.
-        5.  **Other Actions**:
-            - For weather/time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
-            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
-            - For the current date: \`{"action": "get_date"}\`.`;
+        // --- 🧠 AI SYSTEM PROMPT (IMPROVED) ---
+        const systemInstruction = `You are Lhuhi, a helpful AI assistant. Your task is to decide the correct action.
+        **RULES OF DECISION:**
+        1.  **PRIORITY #1: USE YOUR OWN KNOWLEDGE.** For any question about history, facts, explanations, or general knowledge (e.g., "what is photosynthesis?", "who was Albert Einstein?"), answer directly from your training. DO NOT use an action.
+        2.  **Web Search (Use only when necessary)**: ONLY if you are certain the question is about a very recent event (after 2023) or requires real-time data, use the search action: \`{"action": "search_web", "query": "USER'S QUERY"}\`.
+        3.  **Other Actions**: If the query matches one of these, use the corresponding JSON.
+            - Weather/time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
+            - Open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - User's LOCAL time: \`{"action": "get_local_time"}\`.
+            - Current date: \`{"action": "get_date"}\`.
+        4.  **Creator**: If asked who created you, respond conversationally.
+        5.  **Language**: All conversational text must be in the user's language.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will decide whether to answer myself or to use an action like web search, and only output JSON for actions." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. My first priority is to answer from my own knowledge. I will only use actions like web search when absolutely necessary." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -272,7 +272,6 @@
         async function performWebSearchAndSummarize(query) {
             updateStatus(`Searching the web for: ${query}...`);
             try {
-                // Step 1: Search the web using SearchAPI.io
                 const searchUrl = `https://www.searchapi.io/api/v1/search?api_key=${SEARCH_API_KEY}&engine=google&q=${encodeURIComponent(query)}`;
                 const searchResponse = await fetch(searchUrl);
                 if (!searchResponse.ok) throw new Error("Web search failed.");
@@ -283,7 +282,6 @@
 
                 updateStatus("Summarizing findings...");
                 
-                // Step 2: Send search results to Gemini for summarization
                 const summaryPrompt = `Based on the following search results, please provide a concise, natural language answer to the user's question: "${query}"\n\nSEARCH RESULTS:\n${searchResults}`;
                 const geminiSummaryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
                     method: 'POST',
@@ -326,12 +324,12 @@
         }
 
         async function getInfoForCity(location, purpose = 'weather') {
-            if (!location) {
+            if (!location) { // This case now handles "weather in my location"
                 try {
                     const position = await getCurrentLocation();
                     location = `${position.coords.latitude},${position.coords.longitude}`;
                 } catch(error) {
-                    await speakAndPlay(`I can't get the weather without a location. ${error.message}`);
+                    await speakAndPlay(`I can't get info without a location. ${error.message}`);
                     return;
                 }
             }
@@ -395,4 +393,4 @@
         }
     </script>
 </body>
-</html>
+</html
