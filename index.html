@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V12.0 - Full Featured)</title>
+    <title>Lhuhi - Assistant (V13.0 - Sanitized Speech)</title>
     
     <style>
         :root {
@@ -148,7 +148,7 @@
         let isBusy = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
-        const systemInstruction = `You are a helpful AI assistant named Lhuhi. **RULES:**
+        const systemInstruction = `You are a helpful AI assistant named Lhuhi. **VERY IMPORTANT RULES:**
         1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
         2.  **Language**: ALWAYS respond in the exact same language as the user's last query.
         3.  **JSON for Actions**: If the user's request is an action, your response MUST include a JSON object.
@@ -156,11 +156,12 @@
             - For opening sites/apps: \`{"action": "open_url", "url": "https://example.com"}\`.
             - For the current time: \`{"action": "get_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, have a normal, friendly conversation. DO NOT output JSON.`;
+            - The JSON is for the system only. **NEVER read the JSON content aloud.** Provide a natural, spoken response before the JSON.
+        4.  **Conversation**: For ALL other questions, respond with clean, natural language. DO NOT output any JSON, markdown symbols like *, #, or _.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand all the rules, including weather, time, and date." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will provide clean, spoken responses and use JSON only as a tool for the system." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -235,18 +236,26 @@
                 console.log("🤖 Gemini responded:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-                const actionRegex = /{\s*"action"\s*:\s*"(open_url|get_weather|get_time|get_date)"[\s\S]*?}/;
+                const actionRegex = /{\s*"action"[\s\S]*?}/;
                 const match = geminiResponseText.match(actionRegex);
-
-                let textToSpeak = geminiResponseText;
                 let action = null;
                 if (match) {
-                    action = JSON.parse(match[0]);
-                    textToSpeak = geminiResponseText.substring(0, match.index).trim();
+                    try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)}
                 }
 
-                if (textToSpeak) { await speakAndPlay(textToSpeak); }
-                if (action) { await handleAction(action); }
+                // Sanitize the text for speaking
+                const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
+
+                if (textToSpeak) {
+                    await speakAndPlay(textToSpeak);
+                } else if (action) {
+                    // Provide a default spoken confirmation if there's an action but no text
+                    await speakAndPlay("Okay, doing that now.");
+                }
+
+                if (action) {
+                    await handleAction(action);
+                }
 
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
@@ -254,6 +263,20 @@
             } finally {
                 setReadyState();
             }
+        }
+        
+        // --- NEW SANITIZATION FUNCTION ---
+        function sanitizeTextForSpeech(text) {
+            if (!text) return "";
+            // 1. Remove any JSON action block
+            const actionRegex = /{\s*"action"[\s\S]*?}/g;
+            let cleanText = text.replace(actionRegex, '');
+            
+            // 2. Remove common markdown symbols
+            cleanText = cleanText.replace(/[*_`#]/g, '');
+            
+            // 3. Trim whitespace and return
+            return cleanText.trim();
         }
 
         // --- 🚀 ACTION HANDLER ---
@@ -264,20 +287,21 @@
                         if (action.url) window.open(action.url, '_blank');
                         break;
                     case 'get_weather':
-                        await getWeather(action.location); // Location can be null
+                        await getWeather(action.location);
                         break;
                     case 'get_time':
-                        handleTime();
+                        await handleTime();
                         break;
                     case 'get_date':
-                        handleDate();
+                        await handleDate();
                         break;
                     default:
-                        throw new Error("Unknown action.");
+                        // Don't speak an error, as the main flow might have conversational text.
+                        console.error("Unknown action:", action.action);
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
-                await speakAndPlay("I'm not sure how to do that.");
+                await speakAndPlay("I had trouble performing that action.");
             }
         }
 
@@ -289,7 +313,7 @@
                 } else {
                     navigator.geolocation.getCurrentPosition(
                         (position) => resolve(`${position.coords.latitude},${position.coords.longitude}`),
-                        (error) => reject("Unable to retrieve your location. Permission might be denied.")
+                        (error) => reject("Unable to retrieve your location.")
                     );
                 }
             });
@@ -320,7 +344,7 @@
                 const data = await response.json();
 
                 if (response.ok && data.current) {
-                    const summary = `The current weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees Celsius with ${data.current.condition.text}.`;
+                    const summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     await speakAndPlay(summary);
                 } else {
                     throw new Error(data.error?.message || "Invalid weather data.");
