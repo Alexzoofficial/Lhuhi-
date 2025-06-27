@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V13.0 - Sanitized Speech)</title>
+    <title>Lhuhi - Assistant (V14.0 - Final Fix)</title>
     
     <style>
         :root {
@@ -148,16 +148,16 @@
         let isBusy = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
-        const systemInstruction = `You are a helpful AI assistant named Lhuhi. **VERY IMPORTANT RULES:**
-        1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
-        2.  **Language**: ALWAYS respond in the exact same language as the user's last query.
-        3.  **JSON for Actions**: If the user's request is an action, your response MUST include a JSON object.
-            - For weather: \`{"action": "get_weather", "location": "CITY_NAME"}\` (location is optional).
-            - For opening sites/apps: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the current time: \`{"action": "get_time"}\`.
-            - For the current date: \`{"action": "get_date"}\`.
-            - The JSON is for the system only. **NEVER read the JSON content aloud.** Provide a natural, spoken response before the JSON.
-        4.  **Conversation**: For ALL other questions, respond with clean, natural language. DO NOT output any JSON, markdown symbols like *, #, or _.`;
+        const systemInstruction = `You are Lhuhi, an AI assistant.
+        **RULES:**
+        1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
+        2.  **Language**: Respond in the user's language.
+        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. The JSON is for the system only. You should provide a natural, spoken confirmation BEFORE the JSON.
+            - Weather: \`{"action": "get_weather", "location": "CITY_NAME"}\` (location is optional)
+            - Open URL: \`{"action": "open_url", "url": "https://example.com"}\`
+            - Time: \`{"action": "get_time"}\`
+            - Date: \`{"action": "get_date"}\`
+        4.  **Conversation**: For all other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
@@ -243,18 +243,14 @@
                     try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)}
                 }
 
-                // Sanitize the text for speaking
                 const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
-
-                if (textToSpeak) {
-                    await speakAndPlay(textToSpeak);
-                } else if (action) {
-                    // Provide a default spoken confirmation if there's an action but no text
-                    await speakAndPlay("Okay, doing that now.");
-                }
-
+                
                 if (action) {
-                    await handleAction(action);
+                    // If there's an action, handle it. Some actions will speak on their own.
+                    await handleAction(action, textToSpeak);
+                } else if (textToSpeak) {
+                    // If no action, just speak the conversational text.
+                    await speakAndPlay(textToSpeak);
                 }
 
             } catch (error) {
@@ -265,28 +261,34 @@
             }
         }
         
-        // --- NEW SANITIZATION FUNCTION ---
+        // --- SANITIZATION FUNCTION (IMPROVED) ---
         function sanitizeTextForSpeech(text) {
             if (!text) return "";
-            // 1. Remove any JSON action block
-            const actionRegex = /{\s*"action"[\s\S]*?}/g;
-            let cleanText = text.replace(actionRegex, '');
-            
-            // 2. Remove common markdown symbols
-            cleanText = cleanText.replace(/[*_`#]/g, '');
-            
-            // 3. Trim whitespace and return
-            return cleanText.trim();
+            // 1. Remove any JSON block
+            text = text.replace(/{\s*"action"[\s\S]*?}/g, '');
+            // 2. Remove the word "JSON" itself, case-insensitive
+            text = text.replace(/json/gi, '');
+            // 3. Remove common markdown symbols
+            text = text.replace(/[*_`#]/g, '');
+            // 4. Trim whitespace and return
+            return text.trim();
         }
 
         // --- 🚀 ACTION HANDLER ---
-        async function handleAction(action) {
+        async function handleAction(action, spokenConfirmation) {
             try {
+                // If the AI provided a custom confirmation, speak that first.
+                if (spokenConfirmation) {
+                    await speakAndPlay(spokenConfirmation);
+                }
+
                 switch (action.action) {
                     case 'open_url':
+                        if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
                         if (action.url) window.open(action.url, '_blank');
                         break;
                     case 'get_weather':
+                        // The getWeather function will handle its own speech.
                         await getWeather(action.location);
                         break;
                     case 'get_time':
@@ -296,8 +298,7 @@
                         await handleDate();
                         break;
                     default:
-                        // Don't speak an error, as the main flow might have conversational text.
-                        console.error("Unknown action:", action.action);
+                        throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -309,13 +310,13 @@
         async function getCurrentLocation() {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) {
-                    reject("Geolocation is not supported by your browser.");
-                } else {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => resolve(`${position.coords.latitude},${position.coords.longitude}`),
-                        (error) => reject("Unable to retrieve your location.")
-                    );
+                    return reject(new Error("Geolocation is not supported by your browser."));
                 }
+                updateStatus("Requesting location...");
+                navigator.geolocation.getCurrentPosition(
+                    (position) => resolve(`${position.coords.latitude},${position.coords.longitude}`),
+                    (error) => reject(new Error("Unable to retrieve location. Permission denied?"))
+                );
             });
         }
         
@@ -331,15 +332,15 @@
             await speakAndPlay(`Today is ${dateString}.`);
         }
 
-        // --- ☀️ WEATHER FUNCTION ---
+        // --- ☀️ WEATHER FUNCTION (REWORKED) ---
         async function getWeather(location = null) {
-            updateStatus("Getting weather...");
+            let finalLocation = location;
             try {
-                if (!location) {
-                    updateStatus("Detecting your location...");
-                    location = await getCurrentLocation();
+                if (!finalLocation) {
+                    finalLocation = await getCurrentLocation();
                 }
-                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
+                updateStatus(`Getting weather for ${finalLocation}...`);
+                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${finalLocation}`;
                 const response = await fetch(API_URL);
                 const data = await response.json();
 
@@ -351,7 +352,7 @@
                 }
             } catch (error) {
                 console.error("🔴 Weather/Location Error:", error);
-                await speakAndPlay(`Sorry, I couldn't get the weather. ${error.toString()}`);
+                await speakAndPlay(`Sorry, I couldn't get the weather. ${error.message}`);
             }
         }
 
