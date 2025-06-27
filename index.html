@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V15.0 - Context-Aware)</title>
+    <title>Lhuhi - Assistant (V15.1 - Final Sanitization)</title>
     
     <style>
         :root {
@@ -147,17 +147,17 @@
         let isInitialized = false;
         let isBusy = false;
         
-        // --- 🧠 AI SYSTEM PROMPT (REWORKED) ---
+        // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
         **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. You should provide a natural, spoken confirmation BEFORE the JSON.
+        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. You should provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
             - For weather OR time in a specific city (e.g., "weather in London", "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
             - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
@@ -259,15 +259,24 @@
             }
         }
         
+        // --- SANITIZATION FUNCTION (IMPROVED) ---
         function sanitizeTextForSpeech(text) {
             if (!text) return "";
-            text = text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/[*_`#]/g, '');
-            return text.trim();
+            // 1. Remove any JSON block
+            let cleanText = text.replace(/{\s*"action"[\s\S]*?}/g, '');
+            // 2. Remove the word "JSON" itself, case-insensitive, and surrounding phrases
+            cleanText = cleanText.replace(/Sure, here is the JSON:/gi, '');
+            cleanText = cleanText.replace(/json/gi, '');
+            // 3. Remove common markdown symbols
+            cleanText = cleanText.replace(/[*_`#]/g, '');
+            // 4. Trim whitespace and return
+            return cleanText.trim();
         }
 
         // --- 🚀 ACTION HANDLER ---
         async function handleAction(action, userQuery, spokenConfirmation) {
             try {
+                // If the AI provided a custom confirmation, speak that first.
                 if (spokenConfirmation) {
                     await speakAndPlay(spokenConfirmation);
                 }
@@ -334,11 +343,11 @@
                 if (response.ok && data.location && data.current) {
                     let summary = "";
                     if (purpose === 'time') {
-                        const localTime = data.location.localtime; // e.g., "2024-05-27 15:08"
+                        const localTime = data.location.localtime;
                         const time = new Date(localTime);
                         const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
                         summary = `The current time in ${data.location.name} is ${timeString}.`;
-                    } else { // default to weather
+                    } else {
                         summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     }
                     await speakAndPlay(summary);
@@ -398,4 +407,4 @@
         }
     </script>
 </body>
-</html
+</html>
