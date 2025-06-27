@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V17.0 - Conversation Mode)</title>
+    <title>Lhuhi - Assistant (V16.0 - Final Logic Fix)</title>
     
     <style>
         :root {
             --primary-color: #007bff;
             --primary-dark: #0056b3;
-            --accent-color: #00ff7f; /* Green for listening */
-            --speaking-color: #ff4848; /* Red for speaking */
+            --accent-color: #00ff7f;
             --bg-color: #000;
             --text-color: #ccc;
             --button-bg: #222;
@@ -71,12 +70,18 @@
             outline: none;
         }
         
-        #mic-button.listening {
-            border-color: var(--accent-color);
+        #mic-button:hover:not(:disabled) {
+            transform: scale(1.05);
         }
         
-        #mic-button.speaking {
-            border-color: var(--speaking-color);
+        #mic-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        #mic-button.active {
+            border-color: var(--accent-color);
+            transform: scale(1.1);
         }
         
         #mic-icon {
@@ -117,7 +122,7 @@
 </head>
 <body>
 
-    <div class="container" id="status-text">Press the mic button to start conversation</div>
+    <div class="container" id="status-text">Press the mic button to start...</div>
     <div class="circle" id="voice-circle"></div>
     <div class="container mic-container">
         <button id="mic-button" aria-label="Microphone button">
@@ -139,17 +144,18 @@
         
         let recognition;
         let audioContext;
-        let isConversationMode = false;
+        let isInitialized = false;
+        let isBusy = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
         **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object.
-            - For weather OR time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
+        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object and nothing else.
+            - For weather OR time in a specific city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`. You must identify the purpose.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
         4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
         
@@ -170,19 +176,17 @@
                     recognition.interimResults = false;
                     recognition.lang = 'en-US';
 
-                    recognition.onresult = (event) => {
-                        const query = event.results[0][0].transcript;
-                        console.log("✅ User said:", query);
-                        analyzeWithGemini(query);
-                    };
-                    recognition.onerror = (event) => {
-                        console.error('🔴 Recognition error:', event.error);
-                        showError("Voice recognition error.");
-                        stopConversation(); // Stop on error
-                    };
+                    recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
+                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); setReadyState(); };
+                    recognition.onend = () => { micButton.classList.remove('active'); };
                 } else {
-                    showError("Sorry, your browser does not support voice recognition.");
+                    showError("Sorry, your browser does not support voice recognition."); return;
                 }
+                
+                isInitialized = true;
+                setReadyState();
+                console.log("✅ System Initialized and Audio Unlocked.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
                 showError("Could not initialize the assistant.");
@@ -191,39 +195,27 @@
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', () => {
-            if (!audioContext) initializeApp();
-            
-            if (isConversationMode) {
-                stopConversation();
-            } else {
-                startConversation();
-            }
+            if (isBusy) return;
+            if (!isInitialized) { initializeApp(); return; }
+            if (recognition) recognition.start();
         });
 
-        function startConversation() {
-            if (!recognition) return;
-            isConversationMode = true;
-            console.log("Starting conversation mode...");
-            recognition.start();
-        }
-        
-        function stopConversation() {
-            if (!recognition) return;
-            isConversationMode = false;
-            recognition.stop();
-            console.log("Stopping conversation mode...");
-            micButton.classList.remove('listening', 'speaking');
+        function setReadyState() {
+            isBusy = false;
+            micButton.disabled = false;
             voiceCircle.classList.remove('active');
-            updateStatus("Press the mic button to start conversation");
+            micButton.classList.remove('active');
+            updateStatus("Press the mic button and speak...");
         }
-        
-        // --- 🧠 GEMINI AI INTEGRATION ---
+
+        // --- 🧠 GEMINI AI INTEGRATION (REWRITTEN LOGIC) ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
-                if (isConversationMode) recognition.start(); // If nothing is heard, just listen again
-                return;
+                showError("Didn't catch that."); setReadyState(); return;
             }
             
+            isBusy = true;
+            micButton.disabled = true;
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -246,14 +238,18 @@
 
                 let action = null;
                 try {
+                    // Try to parse the entire response as JSON. This is the new, strict rule.
                     action = JSON.parse(geminiResponseText);
                 } catch (e) {
+                    // If it's not a valid JSON, it must be conversational text.
                     action = null;
                 }
                 
                 if (action && action.action) {
+                    // If an action is found, IGNORE the AI's text and let the action handler speak.
                     await handleAction(action);
                 } else {
+                    // If no valid action is found, speak the response as-is.
                     await speakAndPlay(geminiResponseText);
                 }
 
@@ -261,15 +257,11 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                // IMPORTANT: The key to conversation mode
-                if (isConversationMode) {
-                    console.log("AI finished, listening again...");
-                    recognition.start(); // Listen again automatically
-                }
+                setReadyState();
             }
         }
         
-        // --- 🚀 ACTION HANDLER ---
+        // --- 🚀 ACTION HANDLER (SELF-CONTAINED SPEECH) ---
         async function handleAction(action) {
             try {
                 switch (action.action) {
@@ -295,10 +287,12 @@
             }
         }
 
-        // --- FEATURES ---
+        // --- NEW & REWORKED FEATURES ---
         async function getCurrentLocation() {
             return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
+                if (!navigator.geolocation) {
+                    return reject(new Error("Geolocation is not supported."));
+                }
                 updateStatus("Requesting location...");
                 navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
             });
@@ -317,26 +311,24 @@
         }
 
         async function getInfoForCity(location, purpose = 'weather') {
-            if (!location) { // If location is not provided, try to get it automatically
-                try {
-                    const position = await getCurrentLocation();
-                    location = `${position.coords.latitude},${position.coords.longitude}`;
-                } catch (error) {
-                    await speakAndPlay(`I can't get the weather without a location. Please specify a city or grant location permission.`);
-                    return;
-                }
+            if (!location) {
+                await speakAndPlay("Please specify a city for me to get the information.");
+                return;
             }
             updateStatus(`Getting info for ${location}...`);
             const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
+
                 if (response.ok && data.location && data.current) {
                     let summary = "";
                     if (purpose === 'time') {
-                        const time = new Date(data.location.localtime);
-                        summary = `The current time in ${data.location.name} is ${time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`;
-                    } else {
+                        const localTime = data.location.localtime;
+                        const time = new Date(localTime);
+                        const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+                        summary = `The current time in ${data.location.name} is ${timeString}.`;
+                    } else { // default to weather
                         summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     }
                     await speakAndPlay(summary);
@@ -344,7 +336,8 @@
                     throw new Error(data.error?.message || "Invalid city data received.");
                 }
             } catch (error) {
-                await speakAndPlay(`Sorry, I couldn't get the information for ${location}.`);
+                console.error("🔴 Weather/Location Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the information for ${location}. ${error.message}`);
             }
         }
 
@@ -353,8 +346,7 @@
             if (!text || !text.trim()) return;
             
             updateStatus("Speaking...");
-            micButton.classList.remove('listening');
-            micButton.classList.add('speaking');
+            micButton.classList.add('active');
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -382,9 +374,6 @@
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
                 showError("There was a problem with the voice synthesis.");
-            } finally {
-                micButton.classList.remove('speaking');
-                micButton.classList.add('listening'); // Switch back to listening visually
             }
         }
         
@@ -399,4 +388,4 @@
         }
     </script>
 </body>
-    </html>
+</html>
