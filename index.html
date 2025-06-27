@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V17.0 - Google Search Enabled)</title>
+    <title>Lhuhi - Assistant (V16.0 - Final Logic Fix)</title>
     
     <style>
         :root {
@@ -136,8 +136,6 @@
         const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
-        const GOOGLE_SEARCH_API_KEY = 'AIzaSyAsC26etChOJbWDfbmzgJf6MuOwyuCWNQw';
-        const GOOGLE_SEARCH_ENGINE_ID = 'YOUR_SEARCH_ENGINE_ID_HERE'; // <-- VERY IMPORTANT: REPLACE THIS
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -154,17 +152,16 @@
         **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If a user's request requires an action, your response MUST contain ONLY the action's JSON object.
-            - For weather/time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
+        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object and nothing else.
+            - For weather OR time in a specific city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`. You must identify the purpose.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
-            - For general knowledge questions or recent events (e.g. "what is photosynthesis", "who won the match"): \`{"action": "google_search", "query": "USER'S QUESTION"}\`.
         4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will use the google_search action for general knowledge questions and other actions for their specific purposes." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. For actions, I will only output the JSON. For conversation, I will speak naturally." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -211,7 +208,7 @@
             updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION ---
+        // --- 🧠 GEMINI AI INTEGRATION (REWRITTEN LOGIC) ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that."); setReadyState(); return;
@@ -241,12 +238,18 @@
 
                 let action = null;
                 try {
+                    // Try to parse the entire response as JSON. This is the new, strict rule.
                     action = JSON.parse(geminiResponseText);
-                } catch (e) { action = null; }
+                } catch (e) {
+                    // If it's not a valid JSON, it must be conversational text.
+                    action = null;
+                }
                 
                 if (action && action.action) {
+                    // If an action is found, IGNORE the AI's text and let the action handler speak.
                     await handleAction(action);
                 } else {
+                    // If no valid action is found, speak the response as-is.
                     await speakAndPlay(geminiResponseText);
                 }
 
@@ -258,7 +261,7 @@
             }
         }
         
-        // --- 🚀 ACTION HANDLER ---
+        // --- 🚀 ACTION HANDLER (SELF-CONTAINED SPEECH) ---
         async function handleAction(action) {
             try {
                 switch (action.action) {
@@ -275,9 +278,6 @@
                     case 'get_date':
                         await handleDate();
                         break;
-                    case 'google_search':
-                        await handleGoogleSearch(action.query);
-                        break;
                     default:
                         throw new Error(`Unknown action: ${action.action}`);
                 }
@@ -288,6 +288,16 @@
         }
 
         // --- NEW & REWORKED FEATURES ---
+        async function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    return reject(new Error("Geolocation is not supported."));
+                }
+                updateStatus("Requesting location...");
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+            });
+        }
+        
         async function handleLocalTime() {
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
@@ -314,64 +324,20 @@
                 if (response.ok && data.location && data.current) {
                     let summary = "";
                     if (purpose === 'time') {
-                        const time = new Date(data.location.localtime);
-                        summary = `The current time in ${data.location.name} is ${time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`;
-                    } else {
+                        const localTime = data.location.localtime;
+                        const time = new Date(localTime);
+                        const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+                        summary = `The current time in ${data.location.name} is ${timeString}.`;
+                    } else { // default to weather
                         summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     }
                     await speakAndPlay(summary);
                 } else {
-                    throw new Error(data.error?.message || "Invalid city data.");
+                    throw new Error(data.error?.message || "Invalid city data received.");
                 }
             } catch (error) {
-                console.error("🔴 Weather Error:", error);
-                await speakAndPlay(`Sorry, I couldn't get the information for ${location}.`);
-            }
-        }
-
-        // --- 🔍 GOOGLE SEARCH FEATURE ---
-        async function handleGoogleSearch(query) {
-            if (GOOGLE_SEARCH_ENGINE_ID === 'YOUR_SEARCH_ENGINE_ID_HERE') {
-                await speakAndPlay("Google Search is not configured. The Search Engine ID is missing in the code.");
-                return;
-            }
-            updateStatus(`Searching Google for: ${query}`);
-            try {
-                // Step 1: Fetch search results from Google
-                const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}`;
-                const searchResponse = await fetch(searchUrl);
-                if (!searchResponse.ok) throw new Error("Could not fetch Google search results.");
-                const searchData = await searchResponse.json();
-                
-                if (!searchData.items || searchData.items.length === 0) {
-                    await speakAndPlay(`I couldn't find any direct results for ${query}.`);
-                    return;
-                }
-
-                // Step 2: Format results and ask Gemini to summarize
-                const snippets = searchData.items.slice(0, 5).map(item => `Title: ${item.title}\nSnippet: ${item.snippet}`).join('\n\n');
-                const summaryPrompt = `Based on the following search results, provide a brief, conversational overview for the query "${query}". Do not mention the search results directly, just synthesize the information.\n\nRESULTS:\n${snippets}`;
-                
-                updateStatus(`Summarizing search results...`);
-                
-                const geminiSummaryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: summaryPrompt }] }] }),
-                });
-                if (!geminiSummaryResponse.ok) throw new Error("Could not summarize the results.");
-
-                const summaryResult = await geminiSummaryResponse.json();
-                const summaryText = summaryResult.candidates?.[0]?.content?.parts?.[0]?.text;
-                
-                if (summaryText) {
-                    await speakAndPlay(summaryText);
-                } else {
-                    await speakAndPlay(`I found some information, but I'm having trouble summarizing it.`);
-                }
-            } catch(error) {
-                console.error("🔴 Google Search/Summary Error:", error);
-                await speakAndPlay("I ran into an error while searching. Please try again.");
+                console.error("🔴 Weather/Location Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the information for ${location}. ${error.message}`);
             }
         }
 
