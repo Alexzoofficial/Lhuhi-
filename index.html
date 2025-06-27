@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V16.0 - Final Logic Fix)</title>
+    <title>Lhuhi - Assistant (V17.0 - Web Connected)</title>
     
     <style>
         :root {
@@ -136,6 +136,7 @@
         const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        const SEARCH_API_KEY = 'SyBNH5G13HzVJgYT2TG2bWpT'; // New Search API Key
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -148,20 +149,21 @@
         let isBusy = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
-        const systemInstruction = `You are Lhuhi, an AI assistant.
-        **RULES:**
-        1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
-        2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object and nothing else.
-            - For weather OR time in a specific city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`. You must identify the purpose.
+        const systemInstruction = `You are Lhuhi, a helpful AI assistant.
+        **YOUR TASK IS TO DECIDE WHICH ACTION TO TAKE. For actions, respond ONLY with the JSON object.**
+        1.  **Creator**: If asked who created you, respond conversationally.
+        2.  **Language**: All conversational responses must be in the user's language.
+        3.  **Use Your Knowledge First**: For general knowledge, answer directly.
+        4.  **Web Search**: For recent events, news, or real-time information (e.g., "who won the match yesterday?"), use the search action: \`{"action": "search_web", "query": "USER'S QUERY"}\`.
+        5.  **Other Actions**:
+            - For weather/time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
-            - For the current date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
+            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. For actions, I will only output the JSON. For conversation, I will speak naturally." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will decide whether to answer myself or to use an action like web search, and only output JSON for actions." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -172,25 +174,15 @@
                 
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
-                    recognition.continuous = false;
-                    recognition.interimResults = false;
-                    recognition.lang = 'en-US';
-
+                    recognition.continuous = false; recognition.interimResults = false; recognition.lang = 'en-US';
                     recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
                     recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); setReadyState(); };
                     recognition.onend = () => { micButton.classList.remove('active'); };
-                } else {
-                    showError("Sorry, your browser does not support voice recognition."); return;
-                }
+                } else { showError("Sorry, your browser does not support voice recognition."); return; }
                 
-                isInitialized = true;
-                setReadyState();
-                console.log("✅ System Initialized and Audio Unlocked.");
-            } catch (error) {
-                console.error("🔴 Initialization failed:", error);
-                showError("Could not initialize the assistant.");
-            }
+                isInitialized = true; setReadyState(); console.log("✅ System Initialized and Audio Unlocked.");
+            } catch (error) { console.error("🔴 Initialization failed:", error); showError("Could not initialize the assistant."); }
         }
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
@@ -201,21 +193,15 @@
         });
 
         function setReadyState() {
-            isBusy = false;
-            micButton.disabled = false;
-            voiceCircle.classList.remove('active');
-            micButton.classList.remove('active');
-            updateStatus("Press the mic button and speak...");
+            isBusy = false; micButton.disabled = false; voiceCircle.classList.remove('active');
+            micButton.classList.remove('active'); updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION (REWRITTEN LOGIC) ---
+        // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
-            if (!userQuery || !userQuery.trim()) {
-                showError("Didn't catch that."); setReadyState(); return;
-            }
+            if (!userQuery || !userQuery.trim()) { showError("Didn't catch that."); setReadyState(); return; }
             
-            isBusy = true;
-            micButton.disabled = true;
+            isBusy = true; micButton.disabled = true;
             updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
             voiceCircle.classList.add('active');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -233,23 +219,15 @@
                 const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (!geminiResponseText) throw new Error("Empty response from Gemini.");
 
-                console.log("🤖 Gemini responded:", geminiResponseText);
+                console.log("🤖 Gemini decided:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
                 let action = null;
-                try {
-                    // Try to parse the entire response as JSON. This is the new, strict rule.
-                    action = JSON.parse(geminiResponseText);
-                } catch (e) {
-                    // If it's not a valid JSON, it must be conversational text.
-                    action = null;
-                }
+                try { action = JSON.parse(geminiResponseText); } catch (e) { action = null; }
                 
                 if (action && action.action) {
-                    // If an action is found, IGNORE the AI's text and let the action handler speak.
-                    await handleAction(action);
+                    await handleAction(action, userQuery);
                 } else {
-                    // If no valid action is found, speak the response as-is.
                     await speakAndPlay(geminiResponseText);
                 }
 
@@ -261,8 +239,8 @@
             }
         }
         
-        // --- 🚀 ACTION HANDLER (SELF-CONTAINED SPEECH) ---
-        async function handleAction(action) {
+        // --- 🚀 ACTION HANDLER ---
+        async function handleAction(action, userQuery) {
             try {
                 switch (action.action) {
                     case 'open_url':
@@ -278,6 +256,9 @@
                     case 'get_date':
                         await handleDate();
                         break;
+                    case 'search_web':
+                        await performWebSearchAndSummarize(action.query || userQuery);
+                        break;
                     default:
                         throw new Error(`Unknown action: ${action.action}`);
                 }
@@ -287,12 +268,46 @@
             }
         }
 
-        // --- NEW & REWORKED FEATURES ---
+        // --- NEW WEB SEARCH FUNCTIONALITY ---
+        async function performWebSearchAndSummarize(query) {
+            updateStatus(`Searching the web for: ${query}...`);
+            try {
+                // Step 1: Search the web using SearchAPI.io
+                const searchUrl = `https://www.searchapi.io/api/v1/search?api_key=${SEARCH_API_KEY}&engine=google&q=${encodeURIComponent(query)}`;
+                const searchResponse = await fetch(searchUrl);
+                if (!searchResponse.ok) throw new Error("Web search failed.");
+                const searchData = await searchResponse.json();
+                
+                const searchResults = searchData.organic_results?.slice(0, 5).map(result => `Title: ${result.title}\nSnippet: ${result.snippet}`).join('\n\n');
+                if (!searchResults) throw new Error("No search results found.");
+
+                updateStatus("Summarizing findings...");
+                
+                // Step 2: Send search results to Gemini for summarization
+                const summaryPrompt = `Based on the following search results, please provide a concise, natural language answer to the user's question: "${query}"\n\nSEARCH RESULTS:\n${searchResults}`;
+                const geminiSummaryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: summaryPrompt }] }] }),
+                });
+                if (!geminiSummaryResponse.ok) throw new Error("Summarization failed.");
+
+                const summaryData = await geminiSummaryResponse.json();
+                const summaryText = summaryData.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!summaryText) throw new Error("Could not generate a summary.");
+
+                await speakAndPlay(summaryText);
+                
+            } catch (error) {
+                console.error("🔴 Web Search/Summarize Error:", error);
+                await speakAndPlay(`Sorry, I couldn't find information on that. ${error.message}`);
+            }
+        }
+
+        // --- Other Features ---
         async function getCurrentLocation() {
             return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    return reject(new Error("Geolocation is not supported."));
-                }
+                if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
                 updateStatus("Requesting location...");
                 navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
             });
@@ -312,32 +327,33 @@
 
         async function getInfoForCity(location, purpose = 'weather') {
             if (!location) {
-                await speakAndPlay("Please specify a city for me to get the information.");
-                return;
+                try {
+                    const position = await getCurrentLocation();
+                    location = `${position.coords.latitude},${position.coords.longitude}`;
+                } catch(error) {
+                    await speakAndPlay(`I can't get the weather without a location. ${error.message}`);
+                    return;
+                }
             }
             updateStatus(`Getting info for ${location}...`);
             const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
-
                 if (response.ok && data.location && data.current) {
                     let summary = "";
                     if (purpose === 'time') {
-                        const localTime = data.location.localtime;
-                        const time = new Date(localTime);
+                        const localTime = data.location.localtime; const time = new Date(localTime);
                         const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
                         summary = `The current time in ${data.location.name} is ${timeString}.`;
-                    } else { // default to weather
+                    } else {
                         summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     }
                     await speakAndPlay(summary);
-                } else {
-                    throw new Error(data.error?.message || "Invalid city data received.");
-                }
+                } else { throw new Error(data.error?.message || "Invalid city data."); }
             } catch (error) {
                 console.error("🔴 Weather/Location Error:", error);
-                await speakAndPlay(`Sorry, I couldn't get the information for ${location}. ${error.message}`);
+                await speakAndPlay(`Sorry, I couldn't get the information for ${location}.`);
             }
         }
 
@@ -345,8 +361,7 @@
         async function speakAndPlay(text) {
             if (!text || !text.trim()) return;
             
-            updateStatus("Speaking...");
-            micButton.classList.add('active');
+            updateStatus("Speaking..."); micButton.classList.add('active');
             const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
             try {
                 const response = await fetch(API_URL, {
@@ -359,17 +374,10 @@
                 });
                 if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
                 const audioBlob = await response.blob();
-                
                 const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
                 const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
-                
-                await new Promise(resolve => {
-                    source.onended = resolve;
-                    source.start(0);
-                });
-                
+                source.buffer = audioBuffer; source.connect(audioContext.destination);
+                await new Promise(resolve => { source.onended = resolve; source.start(0); });
                 console.log("✅ Speech finished successfully.");
             } catch (error) {
                 console.error("🔴 ElevenLabs / Audio Playback Error:", error);
@@ -382,7 +390,6 @@
             statusText.innerHTML = message;
             statusText.classList.toggle('error-message', isError);
         }
-        
         function showError(message) {
             updateStatus(message, true);
         }
