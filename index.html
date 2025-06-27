@@ -3,509 +3,400 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V17.3 - VAD Enabled)</title>
-
-<style>
-    :root {
-        --primary-color: #007bff;
-        --primary-dark: #0056b3;
-        --accent-color: #00ff7f; /* Green for listening */
-        --error-color: #ff4444; /* Red for error */
-        --thinking-color: #ffae42; /* Orange for thinking */
-        --bg-color: #000;
-        --text-color: #ccc;
-        --button-bg: #222;
-        --button-border: #555;
-    }
+    <title>Lhuhi - Assistant (V17.0 - Conversation Mode)</title>
     
-    body {
-        background-color: var(--bg-color);
-        margin: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-        color: var(--text-color);
-    }
-    
-    .circle {
-        width: 200px;
-        height: 200px;
-        background: radial-gradient(circle, var(--primary-color), var(--primary-dark));
-        border-radius: 50%;
-        transition: all 0.3s ease-in-out;
-        box-shadow: 0 0 20px var(--primary-color), 0 0 40px var(--primary-color);
-        position: relative;
-        z-index: 1;
-    }
-    
-    .circle.active {
-        transform: scale(1.2);
-        animation: pulse 1.5s infinite;
-    }
-    
-    @keyframes pulse {
-        0% { box-shadow: 0 0 25px var(--thinking-color), 0 0 50px var(--thinking-color); }
-        50% { box-shadow: 0 0 50px #ffcc88, 0 0 100px #ffcc88; }
-        100% { box-shadow: 0 0 25px var(--thinking-color), 0 0 50px var(--thinking-color); }
-    }
-    
-    .container {
-        position: absolute;
-        text-align: center;
-        z-index: 2;
-        width: 90%;
-    }
-    
-    .mic-container {
-        bottom: 40px;
-    }
-    
-    #mic-button {
-        background-color: var(--button-bg);
-        border: 3px solid var(--button-border);
-        border-radius: 50%;
-        padding: 20px;
-        cursor: pointer;
-        transition: all 0.2s;
-        outline: none;
-    }
-    
-    #mic-button:hover:not(:disabled) {
-        transform: scale(1.05);
-    }
-    
-    #mic-button:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-    }
-    
-    #mic-button.listening {
-        border-color: var(--accent-color);
-        transform: scale(1.1);
-        animation: mic-pulse 1s infinite;
-    }
-    
-    @keyframes mic-pulse {
-        0% { box-shadow: 0 0 0 0 rgba(0, 255, 127, 0.7); }
-        70% { box-shadow: 0 0 0 20px rgba(0, 255, 127, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(0, 255, 127, 0); }
-    }
-    
-    #mic-icon {
-        width: 50px;
-        height: 50px;
-        display: block;
-        filter: invert(1);
-        transition: transform 0.2s;
-    }
-    
-    #status-text {
-        top: 40px;
-        font-size: 1.2em;
-        transition: opacity 0.3s, background-color 0.3s;
-        max-width: 80%;
-        margin: 0 auto;
-        padding: 10px 20px;
-        border-radius: 20px;
-        background-color: rgba(0, 0, 0, 0.7);
-    }
-    
-    .loading-dots span { animation: blink 1.4s infinite both; opacity: 0; }
-    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
-    
-    .error-message { color: #fff; background-color: var(--error-color) !important; animation: shake 0.5s; }
-    @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
-    
-    @media (max-width: 600px) {
-        .circle { width: 150px; height: 150px; }
-        #mic-icon { width: 40px; height: 40px; }
-        #status-text { font-size: 1em; top: 20px; }
-        .mic-container { bottom: 20px; }
-    }
-</style>
-
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-dark: #0056b3;
+            --accent-color: #00ff7f; /* Green for listening */
+            --speaking-color: #ff4848; /* Red for speaking */
+            --bg-color: #000;
+            --text-color: #ccc;
+            --button-bg: #222;
+            --button-border: #555;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            color: var(--text-color);
+        }
+        
+        .circle {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--primary-color), var(--primary-dark));
+            border-radius: 50%;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 0 20px var(--primary-color), 0 0 40px var(--primary-color), 0 0 60px var(--primary-color);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .circle.active {
+            transform: scale(1.2);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 25px var(--primary-color), 0 0 50px var(--primary-color); }
+            50% { box-shadow: 0 0 50px #00aaff, 0 0 100px #00aaff; }
+            100% { box-shadow: 0 0 25px var(--primary-color), 0 0 50px var(--primary-color); }
+        }
+        
+        .container {
+            position: absolute;
+            text-align: center;
+            z-index: 2;
+        }
+        
+        .mic-container {
+            bottom: 40px;
+        }
+        
+        #mic-button {
+            background-color: var(--button-bg);
+            border: 3px solid var(--button-border);
+            border-radius: 50%;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            outline: none;
+        }
+        
+        #mic-button.listening {
+            border-color: var(--accent-color);
+        }
+        
+        #mic-button.speaking {
+            border-color: var(--speaking-color);
+        }
+        
+        #mic-icon {
+            width: 50px;
+            height: 50px;
+            display: block;
+            filter: invert(1);
+            transition: transform 0.2s;
+        }
+        
+        #status-text {
+            top: 40px;
+            font-size: 1.2em;
+            transition: opacity 0.3s;
+            max-width: 80%;
+            margin: 0 auto;
+            padding: 10px 20px;
+            border-radius: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        .loading-dots { display: inline-block; }
+        .loading-dots span { animation: blink 1.4s infinite both; opacity: 0; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+        
+        .error-message { color: #ff4444; animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+        
+        @media (max-width: 600px) {
+            .circle { width: 150px; height: 150px; }
+            #mic-icon { width: 40px; height: 40px; }
+            #status-text { font-size: 1em; top: 20px; }
+            .mic-container { bottom: 20px; }
+        }
+    </style>
 </head>
 <body>
 
-<div class="container" id="status-text">Press the mic to activate Lhuhi</div>
-<div class="circle" id="voice-circle"></div>
-<div class="container mic-container">
-    <button id="mic-button" aria-label="Microphone button">
-        <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
-    </button>
-</div>
+    <div class="container" id="status-text">Press the mic button to start conversation</div>
+    <div class="circle" id="voice-circle"></div>
+    <div class="container mic-container">
+        <button id="mic-button" aria-label="Microphone button">
+            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
+        </button>
+    </div>
 
-<script>
-    // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-    const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
-    const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
-    const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-    const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
-    const SEARCH_API_KEY = 'SyBNH5G13HzVJgYT2TG2bWpT';
-    
-    // --- DOM & STATE MANAGEMENT ---
-    const micButton = document.getElementById('mic-button');
-    const voiceCircle = document.getElementById('voice-circle');
-    const statusText = document.getElementById('status-text');
-    
-    let recognition;
-    let audioContext;
-    let isListening = false;
-    let isBusy = false;
-    let silenceTimer;
-    const SILENCE_DELAY = 1500; // 1.5 seconds of silence to submit
+    <script>
+        // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
+        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
+        const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
+        const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
+        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        
+        // --- DOM & STATE MANAGEMENT ---
+        const micButton = document.getElementById('mic-button');
+        const voiceCircle = document.getElementById('voice-circle');
+        const statusText = document.getElementById('status-text');
+        
+        let recognition;
+        let audioContext;
+        let isConversationMode = false;
+        
+        // --- 🧠 AI SYSTEM PROMPT ---
+        const systemInstruction = `You are Lhuhi, an AI assistant.
+        **RULES:**
+        1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
+        2.  **Language**: Respond in the user's language.
+        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object.
+            - For weather OR time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`.
+            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
+        
+        let conversationHistory = [
+            { role: 'user', parts: [{ text: systemInstruction }] },
+            { role: 'model', parts: [{ text: "Okay, I understand. For actions, I will only output the JSON. For conversation, I will speak naturally." }] }
+        ];
 
-    // --- 🧠 AI SYSTEM PROMPT ---
-    const systemInstruction = `You are Lhuhi, a helpful AI assistant. Your primary task is to analyze the user's query and decide the correct action based on these rules, in order:
-    1.  **TOOL/ACTION CHECK:** First, check if the query explicitly matches a specific tool.
-        - For weather in a city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather"}\`
-        - For time in a city (e.g., "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "time"}\`
-        - To open a website: \`{"action": "open_url", "url": "https://example.com"}\`
-        - For the user's local time: \`{"action": "get_local_time"}\`
-        - For the current date: \`{"action": "get_date"}\`
-    2.  **WEB SEARCH CHECK:** If no specific tool matches, determine if the query requires up-to-the-minute, real-time, or very recent information (e.g., news, stock prices, recent events). Use the web search tool: \`{"action": "search_web", "query": "USER'S ORIGINAL QUERY"}\`
-    3.  **INTERNAL KNOWLEDGE:** If the query does NOT require a tool or web search, answer it directly from your own knowledge (e.g., "what is photosynthesis?", "who was Albert Einstein?").
-    **IMPORTANT:** Respond ONLY with the JSON for an action, or with a direct conversational answer. Do not add extra text.`;
-    
-    let conversationHistory = [
-        { role: 'user', parts: [{ text: systemInstruction }] },
-        { role: 'model', parts: [{ text: "Okay, I understand. I will analyze the user's query, decide on a tool, web search, or a direct answer, and respond with only the required output." }] }
-    ];
+        // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
+        function initializeApp() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') audioContext.resume();
+                
+                if ('webkitSpeechRecognition' in window) {
+                    recognition = new webkitSpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
 
-    // --- 🎤 INITIALIZATION & AUDIO ---
-    function initializeAudio() {
-        if (audioContext) return;
-        try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            console.log("✅ AudioContext Initialized.");
-        } catch (e) {
-            console.error("🔴 Could not initialize AudioContext:", e);
-            showError("Browser cannot play audio.", true);
-        }
-    }
-
-    function initializeRecognition() {
-        if (!('webkitSpeechRecognition' in window)) {
-            showError("Browser doesn't support voice recognition.", true);
-            micButton.disabled = true;
-            return;
-        }
-
-        recognition = new webkitSpeechRecognition();
-        recognition.continuous = true; // Listen continuously
-        recognition.interimResults = true; // Get results as user speaks
-        recognition.lang = 'en-US';
-
-        recognition.onstart = () => {
-            isListening = true;
-            micButton.classList.add('listening');
-            updateStatus("Listening... (stop speaking to send)");
-        };
-
-        recognition.onresult = (event) => {
-            clearTimeout(silenceTimer); // Reset silence timer on new speech
-            let interimTranscript = '';
-            let finalTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
+                    recognition.onresult = (event) => {
+                        const query = event.results[0][0].transcript;
+                        console.log("✅ User said:", query);
+                        analyzeWithGemini(query);
+                    };
+                    recognition.onerror = (event) => {
+                        console.error('🔴 Recognition error:', event.error);
+                        showError("Voice recognition error.");
+                        stopConversation(); // Stop on error
+                    };
                 } else {
-                    interimTranscript += event.results[i][0].transcript;
+                    showError("Sorry, your browser does not support voice recognition.");
                 }
-            }
-            // Show interim results to the user
-            if (interimTranscript) {
-                updateStatus(interimTranscript);
-            }
-
-            if (finalTranscript.trim()) {
-                console.log("✅ Final fragment:", finalTranscript);
-                // Set a timer. If no new speech comes, process the transcript.
-                silenceTimer = setTimeout(() => {
-                    stopListeningAndProcess(finalTranscript.trim());
-                }, SILENCE_DELAY);
-            }
-        };
-
-        recognition.onend = () => {
-            isListening = false;
-            micButton.classList.remove('listening');
-            if (!isBusy) {
-                updateStatus("Click the mic to activate");
-            }
-        };
-
-        recognition.onerror = (event) => {
-            console.error('🔴 Recognition error:', event.error);
-            showError(`Error: ${event.error}. Please try again.`, false);
-            isListening = false;
-        };
-    }
-
-    // --- 🕹️ MAIN CONTROL LOGIC ---
-    micButton.addEventListener('click', () => {
-        if (isBusy) return;
-        
-        initializeAudio(); // Ensure audio is ready on first click
-        
-        if (!recognition) initializeRecognition();
-        
-        if (isListening) {
-            stopListeningAndProcess();
-        } else {
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error("🔴 Could not start recognition:", e);
-                // This can happen if it's already started.
-            }
-        }
-    });
-
-    function stopListeningAndProcess(query = null) {
-        if (isListening) {
-            recognition.stop();
-        }
-        clearTimeout(silenceTimer);
-        if (query && query.trim()) {
-            analyzeWithGemini(query);
-        } else {
-            updateStatus("Nothing to process. Click mic to start.");
-        }
-    }
-
-    // --- 🧠 GEMINI AI INTEGRATION ---
-    async function analyzeWithGemini(userQuery) {
-        console.log("➡️ Sending to Gemini:", userQuery);
-        isBusy = true;
-        micButton.disabled = true;
-        updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
-        voiceCircle.classList.add('active');
-        
-        conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-        
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: conversationHistory }),
-            });
-            if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
-            
-            const result = await response.json();
-            const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!geminiResponseText) throw new Error("Empty response from Gemini.");
-
-            console.log("🤖 Gemini decided:", geminiResponseText);
-            conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
-
-            let action = null;
-            try {
-                const cleanedResponse = geminiResponseText.replace(/```json/g, '').replace(/```/g, '').trim();
-                action = JSON.parse(cleanedResponse);
-            } catch (e) {
-                action = null; 
-            }
-            
-            if (action && action.action) {
-                await handleAction(action, userQuery);
-            } else {
-                await speakAndPlay(geminiResponseText);
-            }
-
-        } catch (error) {
-            console.error("🔴 Gemini/Logic Error:", error);
-            await speakAndPlay("I've run into a problem. Please try again.");
-        } finally {
-            isBusy = false;
-            micButton.disabled = false;
-            voiceCircle.classList.remove('active');
-            updateStatus("Ready. Click mic to speak.");
-        }
-    }
-    
-    // --- 🚀 ACTION HANDLER & OTHER FEATURES ---
-    async function handleAction(action, userQuery) { /* ... This function is unchanged ... */ }
-    async function performWebSearchAndSummarize(query) { /* ... This function is unchanged ... */ }
-    async function handleLocalTime() { /* ... This function is unchanged ... */ }
-    async function handleDate() { /* ... This function is unchanged ... */ }
-    async function getInfoForCity(location, purpose = 'weather') { /* ... This function is unchanged ... */ }
-    async function getCurrentLocation() { /* ... This function is unchanged ... */ }
-    // NOTE: The action handlers are complex and were working correctly.
-    // To keep the code block clean, I've omitted them here, but you should
-    // COPY AND PASTE them from your previous version into this spot.
-    // For completeness, here they are again:
-    async function handleAction(action, userQuery) {
-        try {
-            switch (action.action) {
-                case 'open_url':
-                    await speakAndPlay(`Okay, opening that.`);
-                    if (action.url) window.open(action.url, '_blank');
-                    break;
-                case 'get_info_for_city':
-                    await getInfoForCity(action.location, action.purpose);
-                    break;
-                case 'get_local_time':
-                    await handleLocalTime();
-                    break;
-                case 'get_date':
-                    await handleDate();
-                    break;
-                case 'search_web':
-                    await performWebSearchAndSummarize(action.query || userQuery);
-                    break;
-                default:
-                    throw new Error(`Unknown action: ${action.action}`);
-            }
-        } catch (error) {
-            console.error("🔴 Action Handling Error:", error);
-            await speakAndPlay("I had trouble performing that action.");
-        }
-    }
-
-    async function performWebSearchAndSummarize(query) {
-        updateStatus(`Searching: ${query}`);
-        try {
-            const searchUrl = `https://www.searchapi.io/api/v1/search?api_key=${SEARCH_API_KEY}&engine=google&q=${encodeURIComponent(query)}`;
-            const searchResponse = await fetch(searchUrl);
-            if (!searchResponse.ok) throw new Error("Web search failed.");
-            const searchData = await searchResponse.json();
-            const searchResults = searchData.organic_results?.slice(0, 5).map(result => `Title: ${result.title}\nSnippet: ${result.snippet}`).join('\n\n');
-            if (!searchResults || searchResults.trim().length === 0) throw new Error("No useful search results found.");
-            updateStatus("Summarizing findings...");
-            const summaryPrompt = `Based on the following search results, please provide a concise, natural language answer to the user's question: "${query}"\n\nSEARCH RESULTS:\n${searchResults}`;
-            const geminiSummaryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: summaryPrompt }] }] }),
-            });
-            if (!geminiSummaryResponse.ok) throw new Error("Summarization failed.");
-            const summaryData = await geminiSummaryResponse.json();
-            const summaryText = summaryData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!summaryText) throw new Error("Could not generate a summary.");
-            await speakAndPlay(summaryText);
-        } catch (error) {
-            console.error("🔴 Web Search/Summarize Error:", error);
-            await speakAndPlay(`Sorry, I couldn't find information on that. ${error.message}`);
-        }
-    }
-
-    async function handleLocalTime() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-        await speakAndPlay(`The current time is ${timeString}.`);
-    }
-
-    async function handleDate() {
-        const now = new Date();
-        const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        await speakAndPlay(`Today is ${dateString}.`);
-    }
-
-    async function getInfoForCity(location, purpose = 'weather') {
-        let queryLocation = location;
-        if (!location) {
-            try {
-                const position = await getCurrentLocation();
-                queryLocation = `${position.coords.latitude},${position.coords.longitude}`;
             } catch (error) {
-                await speakAndPlay(`I can't get info without a location. ${error.message}`);
+                console.error("🔴 Initialization failed:", error);
+                showError("Could not initialize the assistant.");
+            }
+        }
+
+        // --- 🕹️ MAIN CONTROL LOGIC ---
+        micButton.addEventListener('click', () => {
+            if (!audioContext) initializeApp();
+            
+            if (isConversationMode) {
+                stopConversation();
+            } else {
+                startConversation();
+            }
+        });
+
+        function startConversation() {
+            if (!recognition) return;
+            isConversationMode = true;
+            console.log("Starting conversation mode...");
+            recognition.start();
+        }
+        
+        function stopConversation() {
+            if (!recognition) return;
+            isConversationMode = false;
+            recognition.stop();
+            console.log("Stopping conversation mode...");
+            micButton.classList.remove('listening', 'speaking');
+            voiceCircle.classList.remove('active');
+            updateStatus("Press the mic button to start conversation");
+        }
+        
+        // --- 🧠 GEMINI AI INTEGRATION ---
+        async function analyzeWithGemini(userQuery) {
+            if (!userQuery || !userQuery.trim()) {
+                if (isConversationMode) recognition.start(); // If nothing is heard, just listen again
                 return;
             }
-        }
-        updateStatus(`Getting info for ${location || 'your location'}...`);
-        const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${queryLocation}`;
-        try {
-            const response = await fetch(API_URL);
-            const data = await response.json();
-            if (response.ok && data.location && data.current) {
-                let summary;
-                if (purpose === 'time') {
-                    const time = new Date(data.location.localtime);
-                    const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-                    summary = `The current time in ${data.location.name} is ${timeString}.`;
-                } else {
-                    summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
-                }
-                await speakAndPlay(summary);
-            } else { throw new Error(data.error?.message || "Invalid city data."); }
-        } catch (error) {
-            console.error("🔴 Weather/Location Error:", error);
-            await speakAndPlay(`Sorry, I couldn't get the information for ${location || 'that location'}.`);
-        }
-    }
-    
-    async function getCurrentLocation() {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
-            updateStatus("Requesting location...");
-            navigator.geolocation.getCurrentPosition(resolve, (err) => reject(new Error(err.message)), { timeout: 10000 });
-        });
-    }
+            
+            updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
+            voiceCircle.classList.add('active');
+            conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: conversationHistory }),
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const result = await response.json();
+                const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!geminiResponseText) throw new Error("Empty response from Gemini.");
 
-    // --- 🔊 TTS & PLAYBACK (IMPROVED) ---
-    async function speakAndPlay(text) {
-        if (!text || !text.trim()) {
-             console.log("⏩ Skipping empty text for speech.");
-             return;
+                console.log("🤖 Gemini responded:", geminiResponseText);
+                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
+
+                let action = null;
+                try {
+                    action = JSON.parse(geminiResponseText);
+                } catch (e) {
+                    action = null;
+                }
+                
+                if (action && action.action) {
+                    await handleAction(action);
+                } else {
+                    await speakAndPlay(geminiResponseText);
+                }
+
+            } catch (error) {
+                console.error("🔴 Gemini/Logic Error:", error);
+                await speakAndPlay("I've run into a problem. Please try again.");
+            } finally {
+                // IMPORTANT: The key to conversation mode
+                if (isConversationMode) {
+                    console.log("AI finished, listening again...");
+                    recognition.start(); // Listen again automatically
+                }
+            }
         }
         
-        initializeAudio(); // Make sure context is active before playing
-        updateStatus("Speaking...");
-        voiceCircle.classList.add('active'); // Use thinking animation while speaking
-        console.log("🔊 Trying to speak:", text);
-        const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-                body: JSON.stringify({
-                    text: text, model_id: 'eleven_multilingual_v2',
-                    voice_settings: { stability: 0.55, similarity_boost: 0.75 }
-                }),
-            });
-            if (!response.ok) throw new Error(`Voice API Error: ${response.status} ${response.statusText}`);
-            
-            const audioBlob = await response.blob();
-            const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
-            
-            await new Promise(resolve => {
-                source.onended = resolve;
-                source.start(0);
-            });
-            console.log("✅ Speech finished successfully.");
-            
-        } catch (error) {
-            console.error("🔴 ElevenLabs / Audio Playback Error:", error);
-            showError("Problem with voice synthesis.", true);
+        // --- 🚀 ACTION HANDLER ---
+        async function handleAction(action) {
+            try {
+                switch (action.action) {
+                    case 'open_url':
+                        await speakAndPlay(`Okay, opening that.`);
+                        if (action.url) window.open(action.url, '_blank');
+                        break;
+                    case 'get_info_for_city':
+                        await getInfoForCity(action.location, action.purpose);
+                        break;
+                    case 'get_local_time':
+                        await handleLocalTime();
+                        break;
+                    case 'get_date':
+                        await handleDate();
+                        break;
+                    default:
+                        throw new Error(`Unknown action: ${action.action}`);
+                }
+            } catch (error) {
+                console.error("🔴 Action Handling Error:", error);
+                await speakAndPlay("I had trouble performing that action.");
+            }
         }
-    }
-    
-    // --- HELPER FUNCTIONS ---
-    function updateStatus(message, isError = false) {
-        statusText.innerHTML = message;
-        statusText.classList.toggle('error-message', isError);
-        if(!isError) statusText.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    }
-    function showError(message, isCritical = false) {
-        updateStatus(message, true);
-        if (isCritical) {
-            micButton.disabled = true;
-        }
-    }
-</script>
 
+        // --- FEATURES ---
+        async function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
+                updateStatus("Requesting location...");
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+            });
+        }
+        
+        async function handleLocalTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+            await speakAndPlay(`The current time is ${timeString}.`);
+        }
+        
+        async function handleDate() {
+            const now = new Date();
+            const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            await speakAndPlay(`Today is ${dateString}.`);
+        }
+
+        async function getInfoForCity(location, purpose = 'weather') {
+            if (!location) { // If location is not provided, try to get it automatically
+                try {
+                    const position = await getCurrentLocation();
+                    location = `${position.coords.latitude},${position.coords.longitude}`;
+                } catch (error) {
+                    await speakAndPlay(`I can't get the weather without a location. Please specify a city or grant location permission.`);
+                    return;
+                }
+            }
+            updateStatus(`Getting info for ${location}...`);
+            const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                if (response.ok && data.location && data.current) {
+                    let summary = "";
+                    if (purpose === 'time') {
+                        const time = new Date(data.location.localtime);
+                        summary = `The current time in ${data.location.name} is ${time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`;
+                    } else {
+                        summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
+                    }
+                    await speakAndPlay(summary);
+                } else {
+                    throw new Error(data.error?.message || "Invalid city data received.");
+                }
+            } catch (error) {
+                await speakAndPlay(`Sorry, I couldn't get the information for ${location}.`);
+            }
+        }
+
+        // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
+        async function speakAndPlay(text) {
+            if (!text || !text.trim()) return;
+            
+            updateStatus("Speaking...");
+            micButton.classList.remove('listening');
+            micButton.classList.add('speaking');
+            const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
+                    body: JSON.stringify({
+                        text: text, model_id: 'eleven_multilingual_v2',
+                        voice_settings: { stability: 0.55, similarity_boost: 0.75 }
+                    }),
+                });
+                if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
+                const audioBlob = await response.blob();
+                
+                const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                
+                await new Promise(resolve => {
+                    source.onended = resolve;
+                    source.start(0);
+                });
+                
+                console.log("✅ Speech finished successfully.");
+            } catch (error) {
+                console.error("🔴 ElevenLabs / Audio Playback Error:", error);
+                showError("There was a problem with the voice synthesis.");
+            } finally {
+                micButton.classList.remove('speaking');
+                micButton.classList.add('listening'); // Switch back to listening visually
+            }
+        }
+        
+        // --- HELPER FUNCTIONS ---
+        function updateStatus(message, isError = false) {
+            statusText.innerHTML = message;
+            statusText.classList.toggle('error-message', isError);
+        }
+        
+        function showError(message) {
+            updateStatus(message, true);
+        }
+    </script>
 </body>
-</html>
+    </html>
