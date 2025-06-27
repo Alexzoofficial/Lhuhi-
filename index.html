@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V16.0 - Final Logic Fix)</title>
+    <title>Lhuhi - Assistant (V17.0 - News Enabled)</title>
     
     <style>
         :root {
@@ -136,6 +136,7 @@
         const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        const GNEWS_API_KEY = 'ca0b313811a7368d0edc8cad3fb08e90'; // News API Added
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -146,22 +147,25 @@
         let audioContext;
         let isInitialized = false;
         let isBusy = false;
+        let latestArticles = []; // To store news articles temporarily
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
         **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object and nothing else.
-            - For weather OR time in a specific city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`. You must identify the purpose.
+        3.  **Actions**: If the user's request is an action, your response MUST contain ONLY the action's JSON object.
+            - For weather OR time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME", "purpose": "weather" or "time"}\`. You must identify the purpose.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
+            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
+            - For news headlines: \`{"action": "get_news"}\`.
+            - For details on a news story (e.g., "tell me about the first one"): \`{"action": "get_news_detail", "query": "first"}\`.
         4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. For actions, I will only output the JSON. For conversation, I will speak naturally." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will handle all actions including news headlines and details as instructed." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -208,7 +212,7 @@
             updateStatus("Press the mic button and speak...");
         }
 
-        // --- 🧠 GEMINI AI INTEGRATION (REWRITTEN LOGIC) ---
+        // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 showError("Didn't catch that."); setReadyState(); return;
@@ -238,18 +242,14 @@
 
                 let action = null;
                 try {
-                    // Try to parse the entire response as JSON. This is the new, strict rule.
                     action = JSON.parse(geminiResponseText);
                 } catch (e) {
-                    // If it's not a valid JSON, it must be conversational text.
                     action = null;
                 }
                 
                 if (action && action.action) {
-                    // If an action is found, IGNORE the AI's text and let the action handler speak.
                     await handleAction(action);
                 } else {
-                    // If no valid action is found, speak the response as-is.
                     await speakAndPlay(geminiResponseText);
                 }
 
@@ -261,7 +261,7 @@
             }
         }
         
-        // --- 🚀 ACTION HANDLER (SELF-CONTAINED SPEECH) ---
+        // --- 🚀 ACTION HANDLER ---
         async function handleAction(action) {
             try {
                 switch (action.action) {
@@ -277,6 +277,12 @@
                         break;
                     case 'get_date':
                         await handleDate();
+                        break;
+                    case 'get_news':
+                        await getNewsHeadlines();
+                        break;
+                    case 'get_news_detail':
+                        await getNewsDetail(action.query);
                         break;
                     default:
                         throw new Error(`Unknown action: ${action.action}`);
@@ -320,24 +326,64 @@
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
-
-                if (response.ok && data.location && data.current) {
+                if (response.ok && data.location) {
                     let summary = "";
                     if (purpose === 'time') {
-                        const localTime = data.location.localtime;
-                        const time = new Date(localTime);
-                        const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-                        summary = `The current time in ${data.location.name} is ${timeString}.`;
-                    } else { // default to weather
+                        const time = new Date(data.location.localtime);
+                        summary = `The current time in ${data.location.name} is ${time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`;
+                    } else {
                         summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     }
                     await speakAndPlay(summary);
-                } else {
-                    throw new Error(data.error?.message || "Invalid city data received.");
-                }
+                } else { throw new Error(data.error?.message || "Invalid city data."); }
             } catch (error) {
                 console.error("🔴 Weather/Location Error:", error);
                 await speakAndPlay(`Sorry, I couldn't get the information for ${location}. ${error.message}`);
+            }
+        }
+
+        async function getNewsHeadlines() {
+            updateStatus("Fetching top headlines...");
+            const API_URL = `https://gnews.io/api/v4/top-headlines?lang=en&token=${GNEWS_API_KEY}`;
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                if (response.ok && data.articles) {
+                    latestArticles = data.articles.slice(0, 5); // Store top 5 articles
+                    let speech = "Here are the top headlines. ";
+                    latestArticles.forEach((article, index) => {
+                        speech += `Story ${index + 1}: ${article.title}. `;
+                    });
+                    speech += "Which story would you like more details on?";
+                    await speakAndPlay(speech);
+                } else { throw new Error(data.message || "Could not fetch news."); }
+            } catch(error) {
+                console.error("🔴 GNews Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the news right now. ${error.message}`);
+            }
+        }
+
+        async function getNewsDetail(query) {
+            if (latestArticles.length === 0) {
+                await speakAndPlay("I don't have any news loaded. Please ask for headlines first.");
+                return;
+            }
+            let articleIndex = -1;
+            const qLower = query.toLowerCase();
+
+            const numberMap = { "first": 1, "one": 1, "second": 2, "two": 2, "third": 3, "three": 3, "fourth": 4, "four": 4, "fifth": 5, "five": 5 };
+
+            if (numberMap[qLower]) {
+                articleIndex = numberMap[qLower] - 1;
+            } else if (parseInt(qLower)) {
+                articleIndex = parseInt(qLower) - 1;
+            }
+
+            if (articleIndex >= 0 && articleIndex < latestArticles.length) {
+                const article = latestArticles[articleIndex];
+                await speakAndPlay(article.description || "No further description is available for this story.");
+            } else {
+                await speakAndPlay("Sorry, I couldn't find that story. Please ask for a number from one to five.");
             }
         }
 
