@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V11.0 - Weather Re-enabled)</title>
+    <title>Lhuhi - Assistant (V12.0 - Full Featured)</title>
     
     <style>
         :root {
@@ -133,9 +133,9 @@
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
-        const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6'; // New API Key
+        const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
-        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606'; // Weather API Re-added
+        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -152,23 +152,22 @@
         1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
         2.  **Language**: ALWAYS respond in the exact same language as the user's last query.
         3.  **JSON for Actions**: If the user's request is an action, your response MUST include a JSON object.
-            - For weather: \`{"action": "get_weather", "location": "CITY_NAME"}\`
-            - For opening sites/apps: \`{"action": "open_url", "url": "https://example.com"}\`
-            - You can add a short conversational phrase before the JSON.
+            - For weather: \`{"action": "get_weather", "location": "CITY_NAME"}\` (location is optional).
+            - For opening sites/apps: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - For the current time: \`{"action": "get_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.
         4.  **Conversation**: For ALL other questions, have a normal, friendly conversation. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand all the rules, including weather." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand all the rules, including weather, time, and date." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
         function initializeApp() {
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') {
-                    audioContext.resume();
-                }
+                if (audioContext.state === 'suspended') audioContext.resume();
                 
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
@@ -181,14 +180,12 @@
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); setReadyState(); };
                     recognition.onend = () => { micButton.classList.remove('active'); };
                 } else {
-                    showError("Sorry, your browser does not support voice recognition.");
-                    return;
+                    showError("Sorry, your browser does not support voice recognition."); return;
                 }
                 
                 isInitialized = true;
                 setReadyState();
                 console.log("✅ System Initialized and Audio Unlocked.");
-
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
                 showError("Could not initialize the assistant.");
@@ -198,13 +195,8 @@
         // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', () => {
             if (isBusy) return;
-            if (!isInitialized) {
-                initializeApp();
-                return;
-            }
-            if (recognition) {
-                recognition.start();
-            }
+            if (!isInitialized) { initializeApp(); return; }
+            if (recognition) recognition.start();
         });
 
         function setReadyState() {
@@ -218,9 +210,7 @@
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
-                showError("Didn't catch that.");
-                setReadyState();
-                return;
+                showError("Didn't catch that."); setReadyState(); return;
             }
             
             isBusy = true;
@@ -245,7 +235,7 @@
                 console.log("🤖 Gemini responded:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-                const actionRegex = /{\s*"action"\s*:\s*"(open_url|get_weather)"[\s\S]*?}/;
+                const actionRegex = /{\s*"action"\s*:\s*"(open_url|get_weather|get_time|get_date)"[\s\S]*?}/;
                 const match = geminiResponseText.match(actionRegex);
 
                 let textToSpeak = geminiResponseText;
@@ -255,12 +245,8 @@
                     textToSpeak = geminiResponseText.substring(0, match.index).trim();
                 }
 
-                if (textToSpeak) {
-                    await speakAndPlay(textToSpeak);
-                }
-                if (action) {
-                    await handleAction(action);
-                }
+                if (textToSpeak) { await speakAndPlay(textToSpeak); }
+                if (action) { await handleAction(action); }
 
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
@@ -273,14 +259,21 @@
         // --- 🚀 ACTION HANDLER ---
         async function handleAction(action) {
             try {
-                if (action.action === 'open_url' && action.url) {
-                    const hostname = new URL(action.url).hostname.replace('www.', '');
-                    updateStatus(`Opening ${hostname}...`);
-                    window.open(action.url, '_blank');
-                } else if (action.action === 'get_weather' && action.location) {
-                    await getWeather(action.location);
-                } else { 
-                    throw new Error("Unknown action.");
+                switch (action.action) {
+                    case 'open_url':
+                        if (action.url) window.open(action.url, '_blank');
+                        break;
+                    case 'get_weather':
+                        await getWeather(action.location); // Location can be null
+                        break;
+                    case 'get_time':
+                        handleTime();
+                        break;
+                    case 'get_date':
+                        handleDate();
+                        break;
+                    default:
+                        throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -288,13 +281,44 @@
             }
         }
 
+        // --- NEW FEATURES ---
+        async function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject("Geolocation is not supported by your browser.");
+                } else {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve(`${position.coords.latitude},${position.coords.longitude}`),
+                        (error) => reject("Unable to retrieve your location. Permission might be denied.")
+                    );
+                }
+            });
+        }
+        
+        async function handleTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+            await speakAndPlay(`The current time is ${timeString}.`);
+        }
+        
+        async function handleDate() {
+            const now = new Date();
+            const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            await speakAndPlay(`Today is ${dateString}.`);
+        }
+
         // --- ☀️ WEATHER FUNCTION ---
-        async function getWeather(location) {
-            updateStatus(`Getting weather for ${location}...`);
-            const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
+        async function getWeather(location = null) {
+            updateStatus("Getting weather...");
             try {
+                if (!location) {
+                    updateStatus("Detecting your location...");
+                    location = await getCurrentLocation();
+                }
+                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
                 const response = await fetch(API_URL);
                 const data = await response.json();
+
                 if (response.ok && data.current) {
                     const summary = `The current weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees Celsius with ${data.current.condition.text}.`;
                     await speakAndPlay(summary);
@@ -302,8 +326,8 @@
                     throw new Error(data.error?.message || "Invalid weather data.");
                 }
             } catch (error) {
-                console.error("🔴 WeatherAPI Error:", error);
-                await speakAndPlay(`Sorry, I couldn't get the weather for ${location}.`);
+                console.error("🔴 Weather/Location Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the weather. ${error.toString()}`);
             }
         }
 
@@ -324,7 +348,6 @@
                     }),
                 });
                 if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
-
                 const audioBlob = await response.blob();
                 
                 const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
