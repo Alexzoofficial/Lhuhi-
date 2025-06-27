@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Assistant (V10.0 - Final & Stable)</title>
+    <title>Lhuhi - Assistant (V11.0 - Weather Re-enabled)</title>
     
     <style>
         :root {
@@ -133,8 +133,9 @@
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
-        const ELEVENLABS_API_KEY = 'sk_32575f00d6c61366f00a114698993270362892674d15d9de';
+        const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6'; // New API Key
         const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
+        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606'; // Weather API Re-added
         
         // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
@@ -150,24 +151,25 @@
         const systemInstruction = `You are a helpful AI assistant named Lhuhi. **RULES:**
         1.  **Creator**: If asked who created you, ALWAYS say 'Alexzo' created and trained you.
         2.  **Language**: ALWAYS respond in the exact same language as the user's last query.
-        3.  **URL Action**: If the user wants to open a website or app, your response MUST include a JSON object like this: \`{"action": "open_url", "url": "https://www.youtube.com"}\`. You can add a short conversational phrase before it.
+        3.  **JSON for Actions**: If the user's request is an action, your response MUST include a JSON object.
+            - For weather: \`{"action": "get_weather", "location": "CITY_NAME"}\`
+            - For opening sites/apps: \`{"action": "open_url", "url": "https://example.com"}\`
+            - You can add a short conversational phrase before the JSON.
         4.  **Conversation**: For ALL other questions, have a normal, friendly conversation. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand all the rules." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand all the rules, including weather." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
         function initializeApp() {
             try {
-                // 1. Create and unlock Audio Context
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioContext.state === 'suspended') {
                     audioContext.resume();
                 }
                 
-                // 2. Setup Speech Recognition
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
@@ -180,10 +182,9 @@
                     recognition.onend = () => { micButton.classList.remove('active'); };
                 } else {
                     showError("Sorry, your browser does not support voice recognition.");
-                    return; // Stop if no recognition
+                    return;
                 }
                 
-                // 3. Set state to initialized
                 isInitialized = true;
                 setReadyState();
                 console.log("✅ System Initialized and Audio Unlocked.");
@@ -194,15 +195,13 @@
             }
         }
 
-        // --- 🕹️ MAIN CONTROL LOGIC (SIMPLIFIED) ---
+        // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', () => {
-            if (isBusy) return; // Do nothing if busy
-
+            if (isBusy) return;
             if (!isInitialized) {
                 initializeApp();
                 return;
             }
-            
             if (recognition) {
                 recognition.start();
             }
@@ -246,7 +245,7 @@
                 console.log("🤖 Gemini responded:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-                const actionRegex = /{\s*"action"\s*:\s*"open_url"[\s\S]*?}/;
+                const actionRegex = /{\s*"action"\s*:\s*"(open_url|get_weather)"[\s\S]*?}/;
                 const match = geminiResponseText.match(actionRegex);
 
                 let textToSpeak = geminiResponseText;
@@ -278,10 +277,33 @@
                     const hostname = new URL(action.url).hostname.replace('www.', '');
                     updateStatus(`Opening ${hostname}...`);
                     window.open(action.url, '_blank');
-                } else { throw new Error("Unknown action."); }
+                } else if (action.action === 'get_weather' && action.location) {
+                    await getWeather(action.location);
+                } else { 
+                    throw new Error("Unknown action.");
+                }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
                 await speakAndPlay("I'm not sure how to do that.");
+            }
+        }
+
+        // --- ☀️ WEATHER FUNCTION ---
+        async function getWeather(location) {
+            updateStatus(`Getting weather for ${location}...`);
+            const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                if (response.ok && data.current) {
+                    const summary = `The current weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees Celsius with ${data.current.condition.text}.`;
+                    await speakAndPlay(summary);
+                } else {
+                    throw new Error(data.error?.message || "Invalid weather data.");
+                }
+            } catch (error) {
+                console.error("🔴 WeatherAPI Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the weather for ${location}.`);
             }
         }
 
@@ -305,13 +327,11 @@
 
                 const audioBlob = await response.blob();
                 
-                // Play audio using the unlocked context
                 const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
                 
-                // Use a promise to wait for the audio to end
                 await new Promise(resolve => {
                     source.onended = resolve;
                     source.start(0);
