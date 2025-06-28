@@ -1,144 +1,386 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Lhuhi - Your AI Assistant</title>
-  <style>
-    body {
-      background: #121212;
-      color: #f0f0f0;
-      font-family: 'Segoe UI', sans-serif;
-      display: flex;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 600px;
-    }
-
-    h1 {
-      text-align: center;
-    }
-
-    textarea {
-      width: 100%;
-      height: 120px;
-      font-size: 16px;
-      padding: 10px;
-      margin-top: 10px;
-      background: #1e1e1e;
-      border: 1px solid #555;
-      color: white;
-    }
-
-    .controls {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-      flex-wrap: wrap;
-    }
-
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background: #2196f3;
-      color: white;
-      border: none;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-
-    button:hover {
-      background: #1976d2;
-    }
-
-    #response {
-      margin-top: 20px;
-      white-space: pre-wrap;
-      background: #1e1e1e;
-      padding: 10px;
-      border-radius: 5px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lhuhi - Assistant (V16.0 - Browser TTS)</title>
+    
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-dark: #0056b3;
+            --accent-color: #00ff7f;
+            --bg-color: #000;
+            --text-color: #ccc;
+            --button-bg: #222;
+            --button-border: #555;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            color: var(--text-color);
+        }
+        
+        .circle {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--primary-color), var(--primary-dark));
+            border-radius: 50%;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 0 20px var(--primary-color), 0 0 40px var(--primary-color), 0 0 60px var(--primary-color);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .circle.active {
+            transform: scale(1.2);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 25px var(--primary-color), 0 0 50px var(--primary-color); }
+            50% { box-shadow: 0 0 50px #00aaff, 0 0 100px #00aaff; }
+            100% { box-shadow: 0 0 25px var(--primary-color), 0 0 50px var(--primary-color); }
+        }
+        
+        .container {
+            position: absolute;
+            text-align: center;
+            z-index: 2;
+        }
+        
+        .mic-container {
+            bottom: 40px;
+        }
+        
+        #mic-button {
+            background-color: var(--button-bg);
+            border: 3px solid var(--button-border);
+            border-radius: 50%;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            outline: none;
+        }
+        
+        #mic-button:hover:not(:disabled) {
+            transform: scale(1.05);
+        }
+        
+        #mic-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        #mic-button.active {
+            border-color: var(--accent-color);
+            transform: scale(1.1);
+        }
+        
+        #mic-icon {
+            width: 50px;
+            height: 50px;
+            display: block;
+            filter: invert(1);
+            transition: transform 0.2s;
+        }
+        
+        #status-text {
+            top: 40px;
+            font-size: 1.2em;
+            transition: opacity 0.3s;
+            max-width: 80%;
+            margin: 0 auto;
+            padding: 10px 20px;
+            border-radius: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        .loading-dots { display: inline-block; }
+        .loading-dots span { animation: blink 1.4s infinite both; opacity: 0; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+        
+        .error-message { color: #ff4444; animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+        
+        @media (max-width: 600px) {
+            .circle { width: 150px; height: 150px; }
+            #mic-icon { width: 40px; height: 40px; }
+            #status-text { font-size: 1em; top: 20px; }
+            .mic-container { bottom: 20px; }
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🌟 Lhuhi - AI Assistant 🌟</h1>
-    
-    <textarea id="input" placeholder="Ask me anything... in any language"></textarea>
-    
-    <div class="controls">
-      <button onclick="sendToGemini()">🧠 Ask Lhuhi</button>
-      <button onclick="startSpeechRecognition()">🎤 Speak</button>
-      <button onclick="speakOut()">🔈 Speak Output</button>
+
+    <div class="container" id="status-text">Press the mic button to start...</div>
+    <div class="circle" id="voice-circle"></div>
+    <div class="container mic-container">
+        <button id="mic-button" aria-label="Microphone button">
+            <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
+        </button>
     </div>
-    
-    <div id="response"></div>
-  </div>
 
-  <script>
-    const GEMINI_API_KEY = "AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk"; // Replace with your actual Gemini API Key
+    <script>
+        // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
+        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
+        const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        // ElevenLabs API has been removed.
+        
+        // --- DOM & STATE MANAGEMENT ---
+        const micButton = document.getElementById('mic-button');
+        const voiceCircle = document.getElementById('voice-circle');
+        const statusText = document.getElementById('status-text');
+        
+        let recognition;
+        let isInitialized = false;
+        let isBusy = false;
+        
+        // --- 🧠 AI SYSTEM PROMPT ---
+        const systemInstruction = `You are Lhuhi, an AI assistant.
+        **RULES:**
+        1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
+        2.  **Language**: Respond in the user's language.
+        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. You should provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
+            - For weather OR time in a specific city (e.g., "weather in London", "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
+            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
+        
+        let conversationHistory = [
+            { role: 'user', parts: [{ text: systemInstruction }] },
+            { role: 'model', parts: [{ text: "Okay, I understand. I will use 'get_info_for_city' for both weather and time in specific cities, and other actions for their specific purposes." }] }
+        ];
 
-    async function sendToGemini() {
-      const input = document.getElementById("input").value;
-      const responseDiv = document.getElementById("response");
+        // --- 🎤 INITIALIZATION ---
+        function initializeApp() {
+            try {
+                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window) {
+                    recognition = new webkitSpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
 
-      if (!input) return alert("Please enter a question.");
+                    recognition.onstart = () => { micButton.classList.add('active'); updateStatus("Listening..."); };
+                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); showError("Voice recognition error."); setReadyState(); };
+                    recognition.onend = () => { micButton.classList.remove('active'); };
+                } else {
+                    showError("Sorry, your browser does not support Speech APIs."); return;
+                }
+                
+                isInitialized = true;
+                setReadyState();
+                console.log("✅ System Initialized.");
+            } catch (error) {
+                console.error("🔴 Initialization failed:", error);
+                showError("Could not initialize the assistant.");
+            }
+        }
 
-      responseDiv.innerHTML = "Thinking...";
-
-      const body = {
-        contents: [{
-          parts: [{ text: input }],
-        }],
-      };
-
-      try {
-        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+        // --- 🕹️ MAIN CONTROL LOGIC ---
+        micButton.addEventListener('click', () => {
+            if (isBusy) return;
+            if (!isInitialized) { initializeApp(); return; }
+            if (recognition) recognition.start();
         });
 
-        const data = await res.json();
-        const output = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
-        responseDiv.innerHTML = output;
-        window.lastResponse = output;
-      } catch (err) {
-        responseDiv.innerHTML = "Error: " + err.message;
-      }
-    }
+        function setReadyState() {
+            isBusy = false;
+            micButton.disabled = false;
+            voiceCircle.classList.remove('active');
+            micButton.classList.remove('active');
+            updateStatus("Press the mic button and speak...");
+        }
 
-    // 🎤 Speech to Text
-    function startSpeechRecognition() {
-      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = 'en-IN';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+        // --- 🧠 GEMINI AI INTEGRATION ---
+        async function analyzeWithGemini(userQuery) {
+            if (!userQuery || !userQuery.trim()) {
+                showError("Didn't catch that."); setReadyState(); return;
+            }
+            
+            isBusy = true;
+            micButton.disabled = true;
+            updateStatus("Thinking<span class='loading-dots'><span>.</span><span>.</span><span>.</span></span>");
+            voiceCircle.classList.add('active');
+            conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: conversationHistory }),
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const result = await response.json();
+                const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!geminiResponseText) throw new Error("Empty response from Gemini.");
 
-      recognition.onresult = (event) => {
-        document.getElementById("input").value = event.results[0][0].transcript;
-        sendToGemini();
-      };
+                console.log("🤖 Gemini responded:", geminiResponseText);
+                conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-      recognition.onerror = (event) => {
-        alert("Speech Error: " + event.error);
-      };
+                const actionRegex = /{\s*"action"[\s\S]*?}/;
+                const match = geminiResponseText.match(actionRegex);
+                let action = null;
+                if (match) {
+                    try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)}
+                }
+                
+                const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
+                
+                if (action) {
+                    await handleAction(action, userQuery, textToSpeak);
+                } else if (textToSpeak) {
+                    await speakAndPlay(textToSpeak);
+                }
 
-      recognition.start();
-    }
+            } catch (error) {
+                console.error("🔴 Gemini/Logic Error:", error);
+                await speakAndPlay("I've run into a problem. Please try again.");
+            } finally {
+                setReadyState();
+            }
+        }
+        
+        function sanitizeTextForSpeech(text) {
+            if (!text) return "";
+            text = text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/json/gi, '').replace(/[*_`#]/g, '');
+            return text.trim();
+        }
 
-    // 🔈 Text to Speech
-    function speakOut() {
-      if (!window.lastResponse) return alert("Nothing to speak.");
-      const synth = window.speechSynthesis;
-      const utter = new SpeechSynthesisUtterance(window.lastResponse);
-      utter.lang = 'en-IN';
-      synth.speak(utter);
-    }
-  </script>
+        // --- 🚀 ACTION HANDLER ---
+        async function handleAction(action, userQuery, spokenConfirmation) {
+            try {
+                if (spokenConfirmation) {
+                    await speakAndPlay(spokenConfirmation);
+                }
+
+                switch (action.action) {
+                    case 'open_url':
+                        if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
+                        if (action.url) window.open(action.url, '_blank');
+                        break;
+                    case 'get_info_for_city':
+                        const purpose = userQuery.toLowerCase().includes('time') ? 'time' : 'weather';
+                        await getInfoForCity(action.location, purpose);
+                        break;
+                    case 'get_local_time':
+                        await handleLocalTime();
+                        break;
+                    case 'get_date':
+                        await handleDate();
+                        break;
+                    default:
+                        throw new Error("Unknown action.");
+                }
+            } catch (error) {
+                console.error("🔴 Action Handling Error:", error);
+                await speakAndPlay("I had trouble performing that action.");
+            }
+        }
+
+        // --- FEATURES ---
+        async function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    return reject(new Error("Geolocation is not supported."));
+                }
+                updateStatus("Requesting location...");
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+            });
+        }
+        
+        async function handleLocalTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+            await speakAndPlay(`The current time is ${timeString}.`);
+        }
+        
+        async function handleDate() {
+            const now = new Date();
+            const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            await speakAndPlay(`Today is ${dateString}.`);
+        }
+
+        async function getInfoForCity(location = null, purpose = 'weather') {
+            let finalLocation = location;
+            try {
+                if (!finalLocation) {
+                    const position = await getCurrentLocation();
+                    finalLocation = `${position.coords.latitude},${position.coords.longitude}`;
+                }
+                updateStatus(`Getting info for ${finalLocation}...`);
+                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${finalLocation}`;
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (response.ok && data.location && data.current) {
+                    let summary = "";
+                    if (purpose === 'time') {
+                        const localTime = data.location.localtime;
+                        const time = new Date(localTime);
+                        const timeString = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+                        summary = `The current time in ${data.location.name} is ${timeString}.`;
+                    } else {
+                        summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
+                    }
+                    await speakAndPlay(summary);
+                } else {
+                    throw new Error(data.error?.message || "Invalid city data received.");
+                }
+            } catch (error) {
+                console.error("🔴 Weather/Location Error:", error);
+                await speakAndPlay(`Sorry, I couldn't get the information. ${error.message}`);
+            }
+        }
+
+        // --- 🔊 BROWSER TTS FUNCTION (REPLACED ELEVENLABS) ---
+        async function speakAndPlay(text) {
+            if (!text || !text.trim() || !('speechSynthesis' in window)) return;
+            
+            updateStatus("Speaking...");
+            micButton.classList.add('active');
+            
+            return new Promise((resolve, reject) => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; // You can change this if needed
+                
+                utterance.onend = () => {
+                    console.log("✅ Speech finished successfully.");
+                    resolve();
+                };
+
+                utterance.onerror = (event) => {
+                    console.error("🔴 SpeechSynthesis Error:", event.error);
+                    showError("There was a problem with the voice synthesis.");
+                    reject(event.error);
+                };
+                
+                speechSynthesis.speak(utterance);
+            });
+        }
+        
+        // --- HELPER FUNCTIONS ---
+        function updateStatus(message, isError = false) {
+            statusText.innerHTML = message;
+            statusText.classList.toggle('error-message', isError);
+        }
+        
+        function showError(message) {
+            updateStatus(message, true);
+        }
+    </script>
 </body>
 </html>
