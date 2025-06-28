@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Hyper-Realistic 3D Assistant</title>
+    <title>Lhuhi - AI Voice Assistant</title>
     
     <style>
         :root {
@@ -157,7 +157,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
+        const GEMINI_API_KEY = 'AIzaSyDs37yDP8YDj55Jr3NZbKGhOwplZ3FKqRo'; // <-- YOUR NEW API KEY
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE MANAGEMENT ---
@@ -191,7 +191,7 @@
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
         async function initializeApp() {
             try {
-                // Setup Speech Recognition
+                // STEP 1A: Setup Speech Recognition (Voice -> Text)
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
@@ -199,7 +199,11 @@
                     recognition.lang = 'en-US';
 
                     recognition.onstart = () => setUIState('listening');
-                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onresult = (event) => { 
+                        const query = event.results[0][0].transcript; 
+                        console.log("✅ User said:", query); 
+                        analyzeWithGemini(query); // Send recognized text to Gemini
+                    };
                     recognition.onerror = (event) => {
                         console.error('🔴 Recognition error:', event.error);
                         if (event.error !== 'no-speech') {
@@ -214,7 +218,7 @@
                     return;
                 }
                 
-                // Setup Speech Synthesis (The critical fix is here)
+                // STEP 1B: Setup Speech Synthesis (Text -> Voice)
                 await setupSpeechSynthesis();
                 
                 isInitialized = true;
@@ -238,7 +242,7 @@
                             resolve();
                         } else {
                             console.warn("⚠️ Could not find a preferred female English voice. Using browser default.");
-                            resolve(); // Resolve anyway, letting the browser pick a default
+                            resolve();
                         }
                     }
                 };
@@ -248,7 +252,7 @@
                 } else {
                     synthesis.onvoiceschanged = loadVoices;
                     setTimeout(() => {
-                        if (!preferredVoice && synthesis.getVoices().length === 0) {
+                        if (synthesis.getVoices().length === 0) {
                             reject(new Error("Voice loading timed out."));
                         }
                     }, 3000);
@@ -308,7 +312,7 @@
             }
         });
 
-        // --- 🧠 GEMINI AI INTEGRATION ---
+        // --- 🧠 STEP 2: SEND TEXT TO GEMINI API ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 setUIState('idle'); return;
@@ -324,7 +328,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: conversationHistory }),
                 });
-                if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    throw new Error(`API Error: ${response.status} - ${errorBody.error.message}`);
+                }
                 
                 const result = await response.json();
                 const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -343,14 +350,14 @@
                 if (action) {
                     await handleAction(action, userQuery, textToSpeak);
                 } else if (textToSpeak) {
-                    await speakAndPlay(textToSpeak);
+                    await speakAndPlay(textToSpeak); // Send text response to be spoken
                 } else {
                     setUIState('idle');
                 }
 
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
-                await speakAndPlay("I've run into a problem. Please try again.");
+                await speakAndPlay("I've run into a problem. Please check the console for details.");
             }
         }
         
@@ -430,7 +437,7 @@
             }
         }
 
-        // --- 🔊 TTS & PLAYBACK FUNCTION using Web Speech API ---
+        // --- 🔊 STEP 3: PLAY GEMINI'S TEXT RESPONSE AS SPEECH ---
         async function speakAndPlay(text) {
             if (!text || !text.trim() || !synthesis) {
                  setUIState('idle');
