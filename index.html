@@ -3,22 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - 3D Energy Orb Assistant</title>
+    <title>Lhuhi - AI Assistant (Final Corrected Version)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
 
         :root {
-            --glow-color: #9400D3; /* Dark Violet */
-            --accent-color: #00BFFF; /* Deep Sky Blue */
-            --background-start: #000000;
+            --background-start: #0F172A;
             --background-end: #020617;
             --text-color: #E2E8F0;
             --button-bg: rgba(30, 41, 59, 0.5);
         }
         
         body {
-            background: var(--background-end);
+            background: radial-gradient(circle, var(--background-start) 0%, var(--background-end) 100%);
             margin: 0;
             display: flex;
             justify-content: center;
@@ -27,21 +25,7 @@
             overflow: hidden;
             font-family: 'Poppins', sans-serif;
             color: var(--text-color);
-        }
-        
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #animation-canvas {
-            position: absolute;
+            perspective: 1000px;
         }
         
         #ui-container {
@@ -54,17 +38,35 @@
             width: 100%;
             height: 100%;
         }
+        
+        #voice-circle {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            border: 2px solid transparent;
+            background: 
+                radial-gradient(circle at center, rgba(15, 23, 42, 0.8) 0%, transparent 70%),
+                conic-gradient(from var(--angle, 0deg), #f0f, #0ff, #ff0, #f0f) border-box;
+            background-clip: padding-box, border-box;
+            background-origin: padding-box, border-box;
+            box-shadow: 0 0 20px 5px #0ff4, 0 0 20px 5px #f0f4;
+        }
 
         #status-text {
-            position: absolute;
-            font-size: 1.8em;
+            font-size: 1.5em;
             font-weight: 300;
             z-index: 2;
             color: var(--text-color);
-            text-shadow: 0 0 15px rgba(0,0,0,0.7);
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
             transition: all 0.3s;
             max-width: 80%;
             text-align: center;
+            line-height: 1.4;
         }
         
         #mic-button {
@@ -79,24 +81,34 @@
             cursor: pointer;
             transition: all 0.3s;
             outline: none;
-            z-index: 3;
         }
         
-        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: var(--glow-color); }
+        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: #0ff; }
         #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
         #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
+
+        /* --- STATE-BASED ANIMATIONS --- */
+        @property --angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @keyframes spin { to { --angle: 360deg; } }
+        @keyframes vibrate { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(2px, -2px); } 50% { transform: translate(0, 0); } 75% { transform: translate(-2px, 2px); } }
+        
+        #voice-circle.idle { animation: spin 10s linear infinite; }
+        #voice-circle.listening { transform: scale(1.1); animation: spin 2s linear infinite; }
+        #voice-circle.thinking { animation: vibrate 0.1s linear infinite; }
+        #voice-circle.speaking { animation: spin 1.5s linear infinite; }
         
         @media (max-width: 600px) {
-            #status-text { font-size: 1.3em; }
+            #voice-circle { width: 250px; height: 250px; }
+            #status-text { font-size: 1.2em; }
         }
     </style>
 </head>
 <body>
-    <div id="canvas-container">
-        <canvas id="animation-canvas"></canvas>
-    </div>
+
     <div id="ui-container">
-        <div id="status-text">Hi</div>
+        <div id="voice-circle" class="idle">
+            <div id="status-text">Hi</div>
+        </div>
         <button id="mic-button" aria-label="Microphone button">
             <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
         </button>
@@ -109,112 +121,29 @@
         
         // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
+        const voiceCircle = document.getElementById('voice-circle');
         const statusText = document.getElementById('status-text');
         
         let recognition;
         let isInitialized = false;
         let isBusy = false;
         let preferredVoice = null;
-
-        // --- CANVAS ANIMATION ---
-        const canvas = document.getElementById('animation-canvas');
-        const ctx = canvas.getContext('2d');
-        const orb = {
-            state: 'idle',
-            radius: 125,
-            particles: [],
-            hue: 200,
-            pulse: 0
-        };
-
-        function setupCanvas() {
-            const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
-            canvas.width = size;
-            canvas.height = size;
-            orb.radius = size / 2.5;
-            orb.particles = [];
-            for (let i = 0; i < 50; i++) {
-                orb.particles.push({
-                    angle: Math.random() * Math.PI * 2,
-                    speed: (0.005 + Math.random() * 0.01) * (Math.random() > 0.5 ? 1 : -1),
-                    radius: orb.radius + (Math.random() * 20 - 10),
-                    size: Math.random() * 2 + 1
-                });
-            }
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            
-            // State-based updates
-            let baseSpeed = 1;
-            let hueShift = 0.5;
-            let glowAlpha = 0.6;
-            let currentRadius = orb.radius;
-
-            if (orb.state === 'listening') {
-                baseSpeed = 3;
-                hueShift = 2;
-                glowAlpha = 1.0;
-                currentRadius = orb.radius * 1.1;
-            } else if (orb.state === 'thinking') {
-                baseSpeed = 10;
-                hueShift = 10;
-                glowAlpha = 1.0;
-            } else if (orb.state === 'speaking') {
-                orb.pulse += 0.2;
-                currentRadius = orb.radius + Math.sin(orb.pulse) * 10;
-            }
-
-            orb.hue = (orb.hue + hueShift) % 360;
-
-            // Draw center orb
-            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, currentRadius);
-            gradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
-            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, currentRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Draw particles
-            orb.particles.forEach(p => {
-                p.angle += p.speed * baseSpeed * 0.2;
-                const x = centerX + Math.cos(p.angle) * p.radius;
-                const y = centerY + Math.sin(p.angle) * p.radius;
-                const particleHue = (orb.hue + (p.radius - orb.radius) * 5) % 360;
-                
-                ctx.beginPath();
-                ctx.arc(x, y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `hsl(${particleHue}, 100%, 70%)`;
-                ctx.shadowColor = `hsl(${particleHue}, 100%, 50%)`;
-                ctx.shadowBlur = 10;
-                ctx.globalAlpha = glowAlpha;
-                ctx.fill();
-                ctx.globalAlpha = 1;
-                ctx.shadowBlur = 0;
-            });
-            
-            requestAnimationFrame(draw);
-        }
         
-        // --- 🧠 AI SYSTEM PROMPT ---
+        // --- 🧠 AI SYSTEM PROMPT (THE MOST IMPORTANT FIX) ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
-        **RULES:**
+        **CRITICAL RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If a request is an action, your response MUST contain the action's JSON. Provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
-            - Weather/Time in a city: \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
-            - Open URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - Local time: \`{"action": "get_local_time"}\`.
-            - Date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
+        3.  **Real-Time Actions**: When asked for real-time information (like current date, time, weather), you MUST respond ONLY with the action's JSON object. **DO NOT add any conversational text before or after the JSON.** The system will handle the spoken response.
+            - For weather OR time in a specific city (e.g., "weather in London"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
+            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Understood. I will use functions for real-time data and respond naturally." }] }
+            { role: 'model', parts: [{ text: "Understood. For real-time queries, I will only output the JSON." }] }
         ];
 
         // --- 🎤 INITIALIZATION ---
@@ -222,14 +151,14 @@
             try {
                 if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window) {
                     recognition = new webkitSpeechRecognition();
-                    recognition.continuous = false;
-                    recognition.interimResults = false;
+                    recognition.continuous = true; // For live transcription
+                    recognition.interimResults = true; // For live transcription
                     recognition.lang = 'en-US';
 
                     recognition.onstart = () => setUIState('listening');
-                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onresult = handleRecognitionResult;
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
-                    recognition.onend = () => { if(orb.state === 'listening') setUIState('idle', 'Hi'); };
+                    recognition.onend = () => { if(voiceCircle.classList.contains('listening')) setUIState('idle', 'Hi'); };
 
                     speechSynthesis.onvoiceschanged = () => {
                         const voices = speechSynthesis.getVoices();
@@ -251,24 +180,42 @@
             }
         }
         
-        function setUIState(state, message = '') {
-            orb.state = state;
-            micButton.disabled = (state !== 'idle');
+        // --- LIVE TRANSCRIPTION HANDLER ---
+        function handleRecognitionResult(event) {
+            let final_transcript = '';
+            let interim_transcript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    final_transcript += event.results[i][0].transcript;
+                } else {
+                    interim_transcript += event.results[i][0].transcript;
+                }
+            }
             
-            switch(state) {
-                case 'idle': statusText.textContent = message || ''; break;
-                case 'listening': statusText.textContent = 'Listening...'; break;
-                case 'thinking': statusText.textContent = message || '...'; break;
-                case 'speaking': statusText.textContent = ''; break;
-                case 'error': statusText.textContent = message || 'An error occurred.'; setTimeout(() => setUIState('idle', 'Hi'), 3000); break;
+            statusText.textContent = interim_transcript || final_transcript;
+
+            if (final_transcript) {
+                recognition.stop();
+                analyzeWithGemini(final_transcript);
             }
         }
 
-        // --- 🕹️ MAIN CONTROL LOGIC ---
+        // --- UI & MAIN CONTROL ---
+        function setUIState(state, message = '') {
+            voiceCircle.className = 'voice-circle';
+            voiceCircle.classList.add(state);
+            micButton.disabled = (state !== 'idle');
+            statusText.textContent = message || '';
+        }
+
         micButton.addEventListener('click', () => {
             if (micButton.disabled) return;
             if (!isInitialized) { initializeApp(); return; }
-            if (recognition) recognition.start();
+            if (recognition) {
+                speechSynthesis.cancel(); // Cancel any ongoing speech
+                recognition.start();
+            }
         });
 
         // --- 🧠 GEMINI AI INTEGRATION ---
@@ -278,7 +225,7 @@
             }
             
             isBusy = true;
-            setUIState('thinking');
+            setUIState('thinking', '...');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
@@ -297,17 +244,17 @@
                 console.log("🤖 Gemini responded:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
-                const actionRegex = /{\s*"action"[\s\S]*?}/;
-                const match = geminiResponseText.match(actionRegex);
                 let action = null;
-                if (match) { try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)} }
+                try {
+                    action = JSON.parse(geminiResponseText);
+                } catch (e) {
+                    // It's not a JSON, so it must be conversational text.
+                }
                 
-                const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
-                
-                if (action) {
-                    await handleAction(action, userQuery, textToSpeak);
-                } else if (textToSpeak) {
-                    await speakAndPlay(textToSpeak);
+                if (action && action.action) {
+                    await handleAction(action, userQuery);
+                } else if (geminiResponseText) {
+                    await speakAndPlay(geminiResponseText);
                 }
 
             } catch (error) {
@@ -319,18 +266,12 @@
             }
         }
         
-        function sanitizeTextForSpeech(text) {
-            if (!text) return "";
-            return text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/json/gi, '').replace(/[*_`#]/g, '').trim();
-        }
-
         // --- 🚀 ACTION HANDLER ---
-        async function handleAction(action, userQuery, spokenConfirmation) {
+        async function handleAction(action, userQuery) {
             try {
-                if (spokenConfirmation) await speakAndPlay(spokenConfirmation);
                 switch (action.action) {
                     case 'open_url':
-                        if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
+                        await speakAndPlay("Okay, opening that.");
                         if (action.url) window.open(action.url, '_blank');
                         break;
                     case 'get_info_for_city':
@@ -396,23 +337,19 @@
 
         // --- 🔊 BROWSER TTS FUNCTION ---
         async function speakAndPlay(text) {
-            if (!text || !text.trim() || !('speechSynthesis' in window)) return;
-            setUIState('speaking');
+            const sanitizedText = text.replace(/[*_`#]/g, '').trim();
+            if (!sanitizedText || !('speechSynthesis' in window)) return;
+            
+            setUIState('speaking', sanitizedText);
             return new Promise((resolve, reject) => {
                 speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
+                const utterance = new SpeechSynthesisUtterance(sanitizedText);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 utterance.onend = resolve;
                 utterance.onerror = reject;
                 speechSynthesis.speak(utterance);
             });
         }
-        
-        // --- INITIALIZE & START ANIMATION ---
-        setupCanvas();
-        draw();
-        window.addEventListener('resize', setupCanvas);
-
     </script>
 </body>
-    </html>
+</html>
