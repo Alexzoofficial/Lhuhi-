@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - Hyper-Realistic 3D Assistant</title>
+    <title>Lhuhi - 3D Hyper Assistant (Final Version)</title>
     
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
+
         :root {
-            --primary-color: #00AFFF; /* Electric Blue */
-            --accent-color: #00FF7F; /* Spring Green */
-            --glow-color: rgba(0, 175, 255, 0.7);
-            --bg-color: #000;
-            --text-color: #E0E0E0;
-            --button-bg: rgba(34, 34, 34, 0.5);
+            --primary-color: #00BFFF; /* Deep Sky Blue */
+            --accent-color: #00FF7F;  /* Spring Green */
+            --glow-color: rgba(0, 191, 255, 0.8);
+            --core-glow: #FFFFFF;
+            --bg-color: #02041B; /* Deep Space Blue */
+            --text-color: #EAEAEA;
         }
         
         body {
@@ -23,153 +25,149 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Poppins', sans-serif;
             color: var(--text-color);
-            perspective: 1000px; /* Essential for 3D transforms */
+            perspective: 1200px;
         }
         
-        /* Main container for the 3D sphere */
-        #voice-sphere-container {
+        #particle-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        #ui-container {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #voice-orb-container {
             position: relative;
             width: 300px;
             height: 300px;
             transform-style: preserve-3d;
-            animation: idle-breathe 8s ease-in-out infinite;
+            animation: idle-rotate 25s linear infinite;
         }
 
-        #voice-sphere {
+        #voice-orb {
             position: absolute;
             width: 100%;
             height: 100%;
             transform-style: preserve-3d;
-            transition: transform 0.5s ease-out;
+            transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1);
         }
         
-        /* The rings that make up the sphere */
         .ring {
             position: absolute;
             top: 0; left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             border-radius: 50%;
-            border: 2px solid var(--primary-color);
-            box-shadow: 0 0 10px var(--glow-color), inset 0 0 10px var(--glow-color);
-            background: radial-gradient(circle, rgba(0, 175, 255, 0.1) 0%, rgba(0, 175, 255, 0) 60%);
+            border: 1.5px solid var(--primary-color);
+            opacity: 0.7;
+            transition: all 0.6s ease-out;
+        }
+
+        .ring-outer { transform: rotateY(0deg) rotateX(90deg) scale(1); filter: drop-shadow(0 0 5px var(--glow-color)); }
+        .ring-inner { transform: rotateY(0deg) rotateX(90deg) scale(0.7); border-style: dashed; }
+        .ring-vertical { transform: rotateY(90deg) scale(1); }
+
+        #core {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50px; height: 50px;
+            background: var(--core-glow);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px 5px var(--core-glow);
             transition: all 0.5s ease-out;
         }
-
-        /* Arranging rings in a 3D sphere shape */
-        .ring:nth-child(1) { transform: rotateY(0deg); }
-        .ring:nth-child(2) { transform: rotateY(30deg); }
-        .ring:nth-child(3) { transform: rotateY(60deg); }
-        .ring:nth-child(4) { transform: rotateY(90deg); }
-        .ring:nth-child(5) { transform: rotateY(120deg); }
-        .ring:nth-child(6) { transform: rotateY(150deg); }
         
         /* --- STATE-BASED ANIMATIONS --- */
-        @keyframes idle-breathe {
-            0%, 100% { transform: rotateX(15deg) rotateY(0deg) scale(1); }
-            50% { transform: rotateX(10deg) rotateY(20deg) scale(1.02); }
-        }
-
-        @keyframes think-spin {
-            from { transform: rotateY(0deg) rotateX(20deg); }
-            to { transform: rotateY(360deg) rotateX(20deg); }
-        }
+        @keyframes idle-rotate { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+        @keyframes speak-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 20px 5px var(--core-glow); } 50% { transform: scale(1.2); box-shadow: 0 0 35px 15px var(--core-glow); } }
         
-        @keyframes speak-pulse {
-            0%, 100% { transform: scale3d(1, 1, 1); }
-            50% { transform: scale3d(1.05, 1.05, 1.05); }
-        }
+        #voice-orb-container.listening #voice-orb { transform: scale(1.15) rotateX(20deg); }
+        #voice-orb-container.listening .ring { border-color: var(--accent-color); filter: drop-shadow(0 0 8px var(--accent-color)); }
+        
+        #voice-orb-container.thinking #voice-orb { animation: idle-rotate 1.5s linear infinite; }
+        #voice-orb-container.thinking .ring { animation: idle-rotate 2s linear infinite reverse; }
 
-        /* Applying animations based on class */
-        #voice-sphere-container.thinking #voice-sphere {
-            animation: think-spin 1.2s linear infinite;
-        }
-
-        #voice-sphere-container.speaking #voice-sphere {
-            animation: speak-pulse 0.8s ease-in-out infinite;
-        }
-
-        #voice-sphere-container.listening .ring {
-            border-color: var(--accent-color);
-            box-shadow: 0 0 15px var(--accent-color), inset 0 0 15px var(--accent-color);
-            transform: scale(1.1) !important; /* Force scale on listening */
-        }
-
-        /* UI elements */
+        #voice-orb-container.speaking #core { animation: speak-pulse 0.5s ease-in-out infinite; }
+        
         #status-text {
             position: absolute;
-            top: 20%;
+            top: 25%;
             font-size: 1.5em;
             font-weight: 300;
-            text-shadow: 0 0 10px var(--primary-color);
+            text-shadow: 0 0 10px var(--glow-color);
             padding: 10px 25px;
             border-radius: 30px;
             background: rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(5px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
         }
         
         #mic-button {
             position: absolute;
-            bottom: 60px;
-            background-color: var(--button-bg);
-            border: 2px solid rgba(255, 255, 255, 0.2);
+            bottom: 10%;
+            background: radial-gradient(circle, rgba(20, 20, 40, 0.8) 0%, rgba(20, 20, 40, 0.5) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(10px);
             border-radius: 50%;
-            padding: 20px;
+            width: 80px; height: 80px;
+            display: flex; justify-content: center; align-items: center;
             cursor: pointer;
             transition: all 0.3s;
             outline: none;
         }
         
-        #mic-button:hover:not(:disabled) {
-            transform: scale(1.1);
-            border-color: var(--primary-color);
-        }
-        
+        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: var(--primary-color); }
         #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
-        #mic-icon { width: 50px; height: 50px; display: block; filter: invert(0.9); }
-
-        @media (max-width: 600px) {
-            #voice-sphere-container { width: 220px; height: 220px; }
-            #status-text { font-size: 1.1em; top: 25%; }
-        }
+        #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
     </style>
 </head>
 <body>
 
-    <div id="status-text">Press the mic to start</div>
-    <div id="voice-sphere-container">
-        <div id="voice-sphere">
-            <div class="ring"></div>
-            <div class="ring"></div>
-            <div class="ring"></div>
-            <div class="ring"></div>
-            <div class="ring"></div>
-            <div class="ring"></div>
+    <canvas id="particle-canvas"></canvas>
+    <div id="ui-container">
+        <div id="status-text">Press the mic to start</div>
+        <div id="voice-orb-container">
+            <div id="voice-orb">
+                <div class="ring ring-outer"></div>
+                <div class="ring ring-inner"></div>
+                <div class="ring ring-vertical"></div>
+                <div id="core"></div>
+            </div>
         </div>
+        <button id="mic-button" aria-label="Microphone button">
+            <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
+        </button>
     </div>
-    <button id="mic-button" aria-label="Microphone button">
-        <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
-    </button>
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
-        const ELEVENLABS_API_KEY = 'sk_ad7a266abe2a261b0fa707215eb457d18c1705e20a9216d6';
-        const ELEVENLABS_VOICE_ID = 'amiAXapsDOAiHJqbsAZj';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
-        // --- DOM & STATE MANAGEMENT ---
+        // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
-        const sphereContainer = document.getElementById('voice-sphere-container');
+        const orbContainer = document.getElementById('voice-orb-container');
         const statusText = document.getElementById('status-text');
         
         let recognition;
-        let audioContext;
         let isInitialized = false;
+        let isBusy = false;
+        let preferredVoice = null;
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
@@ -185,16 +183,13 @@
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will provide clean, spoken responses and use JSON only as a tool for the system." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will use 'get_info_for_city' for both weather and time in specific cities, and other actions for their specific purposes." }] }
         ];
 
-        // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
+        // --- 🎤 INITIALIZATION ---
         function initializeApp() {
             try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') audioContext.resume();
-                
-                if ('webkitSpeechRecognition' in window) {
+                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window) {
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
                     recognition.interimResults = false;
@@ -203,44 +198,42 @@
                     recognition.onstart = () => setUIState('listening');
                     recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
-                    recognition.onend = () => { if(sphereContainer.classList.contains('listening')) setUIState('idle'); };
+                    recognition.onend = () => { if(orbContainer.classList.contains('listening')) setUIState('idle'); };
+
+                    // Find a better voice
+                    speechSynthesis.onvoiceschanged = () => {
+                        const voices = speechSynthesis.getVoices();
+                        preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
+                                       voices.find(v => v.name.includes('Zira') && v.lang.startsWith('en')) ||
+                                       voices.find(v => v.lang.startsWith('en-US'));
+                        console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
+                    };
                 } else {
                     setUIState('error', "Browser not supported."); return;
                 }
                 
                 isInitialized = true;
                 setUIState('idle');
-                console.log("✅ System Initialized and Audio Unlocked.");
+                console.log("✅ System Initialized.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
                 setUIState('error', "Initialization failed.");
             }
         }
-
+        
         // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
             const states = ['idle', 'listening', 'thinking', 'speaking', 'error'];
-            states.forEach(s => sphereContainer.classList.remove(s));
-            sphereContainer.classList.add(state);
-            micButton.disabled = (state === 'thinking' || state === 'speaking');
+            states.forEach(s => orbContainer.classList.remove(s));
+            orbContainer.classList.add(state);
+            micButton.disabled = (state === 'thinking' || state === 'speaking' || state === 'listening');
             
             switch(state) {
-                case 'idle':
-                    statusText.textContent = message || 'Press the mic to speak';
-                    break;
-                case 'listening':
-                    statusText.textContent = 'Listening...';
-                    break;
-                case 'thinking':
-                    statusText.textContent = 'Thinking...';
-                    break;
-                case 'speaking':
-                    statusText.textContent = 'Speaking...';
-                    break;
-                case 'error':
-                    statusText.textContent = message || 'An error occurred.';
-                    setTimeout(() => setUIState('idle'), 3000); // Reset after error
-                    break;
+                case 'idle': statusText.textContent = message || 'Press the mic to speak'; break;
+                case 'listening': statusText.textContent = 'Listening...'; break;
+                case 'thinking': statusText.textContent = message || 'Thinking...'; break;
+                case 'speaking': statusText.textContent = 'Speaking...'; break;
+                case 'error': statusText.textContent = message || 'An error occurred.'; setTimeout(() => setUIState('idle'), 3000); break;
             }
         }
 
@@ -257,6 +250,7 @@
                 setUIState('error', "Didn't catch that."); return;
             }
             
+            isBusy = true;
             setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
@@ -293,22 +287,20 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
+                isBusy = false;
                 setUIState('idle');
             }
         }
         
         function sanitizeTextForSpeech(text) {
             if (!text) return "";
-            return text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/[*_`#]/g, '').trim();
+            return text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/json/gi, '').replace(/[*_`#]/g, '').trim();
         }
 
         // --- 🚀 ACTION HANDLER ---
         async function handleAction(action, userQuery, spokenConfirmation) {
             try {
-                if (spokenConfirmation) {
-                    await speakAndPlay(spokenConfirmation);
-                }
-
+                if (spokenConfirmation) await speakAndPlay(spokenConfirmation);
                 switch (action.action) {
                     case 'open_url':
                         if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
@@ -318,14 +310,9 @@
                         const purpose = userQuery.toLowerCase().includes('time') ? 'time' : 'weather';
                         await getInfoForCity(action.location, purpose);
                         break;
-                    case 'get_local_time':
-                        await handleLocalTime();
-                        break;
-                    case 'get_date':
-                        await handleDate();
-                        break;
-                    default:
-                        throw new Error("Unknown action.");
+                    case 'get_local_time': await handleLocalTime(); break;
+                    case 'get_date': await handleDate(); break;
+                    default: throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -380,40 +367,72 @@
             }
         }
 
-        // --- 🔊 COMBINED TTS & PLAYBACK FUNCTION ---
+        // --- 🔊 BROWSER TTS FUNCTION ---
         async function speakAndPlay(text) {
-            if (!text || !text.trim()) return;
-            
+            if (!text || !text.trim() || !('speechSynthesis' in window)) return;
             setUIState('speaking');
-            const API_URL = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`;
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-                    body: JSON.stringify({
-                        text: text, model_id: 'eleven_multilingual_v2',
-                        voice_settings: { stability: 0.55, similarity_boost: 0.75 }
-                    }),
-                });
-                if (!response.ok) throw new Error(`Voice API Error: ${response.statusText}`);
-                const audioBlob = await response.blob();
-                
-                const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
-                
-                await new Promise(resolve => {
-                    source.onended = resolve;
-                    source.start(0);
-                });
-                
-                console.log("✅ Speech finished successfully.");
-            } catch (error) {
-                console.error("🔴 ElevenLabs / Audio Playback Error:", error);
-                setUIState('error', "Voice synthesis failed.");
+            return new Promise((resolve, reject) => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                if (preferredVoice) utterance.voice = preferredVoice;
+                utterance.onend = resolve;
+                utterance.onerror = reject;
+                speechSynthesis.speak(utterance);
+            });
+        }
+        
+        // --- 3D PARTICLE BACKGROUND SCRIPT ---
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        let particles = [];
+        const particleCount = 100;
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 1;
+                this.speedX = (Math.random() * 0.5 - 0.25);
+                this.speedY = (Math.random() * 0.5 - 0.25);
+                this.color = `rgba(0, 191, 255, ${Math.random() * 0.5 + 0.2})`;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
             }
         }
+
+        function initParticles() {
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        initParticles();
+        animateParticles();
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            particles = [];
+            initParticles();
+        });
     </script>
 </body>
 </html>
