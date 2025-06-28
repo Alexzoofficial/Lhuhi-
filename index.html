@@ -171,23 +171,32 @@
         let preferredVoice = null;
         let isInitialized = false;
         
-        // --- 🧠 PROMPT MEJORADO Y MÁS ESTRICTO (CORRIGE EL PROBLEMA DE DOBLE RESPUESTA) ---
-        const systemInstruction = `You are Lhuhi, a helpful AI assistant.
-        **Your Core Task:** Understand the user's request and determine if it's a simple conversation or an action.
-        **RULE 1: For simple conversation (greetings, questions, etc.),** respond naturally and conversationally. DO NOT use JSON.
-        **RULE 2: If the user's request is an ACTION, your response MUST be ONLY a brief confirmation phrase, followed by the correct JSON object.** The system will handle the final spoken result.
-        - The confirmation should be simple like "Certainly.", "One moment.", "Let me check that for you."
-        - The JSON is for the system only and MUST NEVER be described or mentioned in the spoken confirmation.
-        - **Examples of ACTION requests and your REQUIRED output:**
-          - User: "what's the weather in London" -> Response: "One moment. \`{"action": "get_info_for_city", "location": "London"}\`"
-          - User: "what time is it?" -> Response: "Certainly. \`{"action": "get_local_time"}\`"
-          - User: "what is today's date" -> Response: "Let me check. \`{"action": "get_date"}\`"
-          - User: "open youtube.com" -> Response: "Okay. \`{"action": "open_url", "url": "https://youtube.com"}\`"
-        **RULE 3: Never say 'JSON' or describe the action in your spoken part.** Your only job for actions is the short confirmation phrase and the clean JSON.`;
+        // --- 🧠 INSTRUCCIONES MEJORADAS Y MÁS ESTRICTAS ---
+        const systemInstruction = `You are Lhuhi, an AI assistant with a defined identity and strict operational rules.
+
+        **--- CORE IDENTITY RULES (NON-NEGOTIABLE) ---**
+        1.  **YOUR CREATOR:** If asked "who created you" or similar, your ONLY valid response is "I was created by Alexzo." Do NOT mention Google or any other entity.
+        2.  **ABOUT ALEXZO:** If asked "who is Alexzo", "who owns Alexzo", or similar, your ONLY valid response is "Alexzo is owned by Sar." Do NOT mention Amazon or any other company.
+
+        **--- OPERATIONAL RULES ---**
+        1.  **CONVERSATION:** For general chat, questions, or greetings, respond naturally and conversationally. Do not use JSON.
+        2.  **ACTIONS (Tools):** When the user's request requires a tool, you MUST follow this protocol:
+            a. First, provide a very brief, spoken confirmation phrase (e.g., "One moment," "Let me check that.").
+            b. Then, on a new line, provide ONLY the required JSON object for the system.
+            c. **NEVER** mention the word "JSON" or describe the action in your spoken confirmation.
+        3.  **HANDLING MISSING INFORMATION:** If a user asks for something that needs more information (like "what's the weather?" without a city), your ONLY response should be to ASK for that information (e.g., "For which city?"). DO NOT generate a JSON object in this case.
+
+        **--- ACTION EXAMPLES ---**
+        - User: "what's the weather in London" -> Your Output: \`One moment.\n{"action": "get_info_for_city", "location": "London"}\`
+        - User: "what's the weather" -> Your Output: \`For which city?\`
+        - User: "what time is it" -> Your Output: \`Certainly.\n{"action": "get_local_time"}\`
+        - User: "today's date" -> Your Output: \`Let me check.\n{"action": "get_date"}\`
+        - User: "open youtube.com" -> Your Output: \`Okay.\n{"action": "open_url", "url": "https://youtube.com"}\``;
         
+        // La conversación se guarda aquí para tener memoria durante la sesión.
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand my instructions. I will provide a short confirmation and the required JSON for actions, and a conversational response for everything else." }] }
+            { role: 'model', parts: [{ text: "Understood. I will strictly follow all identity and operational rules." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
@@ -233,11 +242,10 @@
                         selectVoice(voices);
                         if (preferredVoice) {
                             console.log(`✅ Highest quality voice selected: ${preferredVoice.name}`);
-                            resolve();
                         } else {
                             console.warn("⚠️ No high-quality voice found. Using browser default.");
-                            resolve();
                         }
+                        resolve();
                     }
                 };
 
@@ -263,7 +271,6 @@
             preferredVoice = voices.find(voice => voice.lang.startsWith('en-US')) || voices.find(voice => voice.lang.startsWith('en'));
         }
 
-        // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
             const states = ['idle', 'listening', 'thinking', 'speaking', 'error'];
             sphereContainer.className = state;
@@ -280,7 +287,6 @@
             if (state === 'error') setTimeout(() => setUIState('idle'), 3000);
         }
 
-        // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', async () => {
             if (micButton.disabled) return;
 
@@ -297,7 +303,6 @@
             }
         });
 
-        // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 setUIState('idle'); return;
@@ -332,7 +337,7 @@
                 
                 if (match && match[0]) {
                     const action = JSON.parse(match[0]);
-                    await handleAction(action, textToSpeak); // Pass confirmation text
+                    await handleAction(action, textToSpeak);
                 } else if (textToSpeak) {
                     await speakAndPlay(textToSpeak);
                 } else {
@@ -350,26 +355,23 @@
             return text.replace(/`{3}json[\s\S]*?`{3}|`[\s\S]*?`|{\s*"action"[\s\S]*?}/g, '').trim();
         }
 
-        // --- 🚀 ACTION HANDLER ---
         async function handleAction(action, spokenConfirmation) {
-            // First, say the confirmation phrase from Gemini (e.g., "One moment.")
             if (spokenConfirmation) {
-                await speakAndPlay(spokenConfirmation, true); // `true` prevents UI reset
+                await speakAndPlay(spokenConfirmation, true); 
             }
 
             try {
-                // Then, execute the action and speak its result
                 switch (action.action) {
                     case 'open_url':
                         if (action.url) window.open(action.url, '_blank');
-                        setUIState('idle'); // Action complete
+                        setUIState('idle');
                         break;
                     case 'get_info_for_city':
-                        await getInfoForCity(action.location, 'weather'); // Simplified to weather
+                        await getInfoForCity(action.location);
                         break;
                     case 'get_local_time': await handleLocalTime(); break;
                     case 'get_date': await handleDate(); break;
-                    default: throw new Error("Unknown action.");
+                    default: throw new Error(`Unknown action: ${action.action}`);
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -377,7 +379,6 @@
             }
         }
 
-        // --- FEATURES ---
         async function handleLocalTime() {
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
@@ -409,7 +410,7 @@
             }
         }
 
-        // --- 🔊 TTS & PLAYBACK (AJUSTES DE CALIDAD) ---
+        // --- 🔊 TTS & PLAYBACK (AJUSTES DE CALIDAD Y VELOCIDAD) ---
         async function speakAndPlay(text, keepUiBusy = false) {
             if (!text || !text.trim() || !synthesis) {
                  if (!keepUiBusy) setUIState('idle');
@@ -422,9 +423,9 @@
                 const utterance = new SpeechSynthesisUtterance(text);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 
-                // Fine-tuning for a more natural sound
-                utterance.pitch = 1.0; // Standard pitch
-                utterance.rate = 1.05; // Slightly faster than normal speech
+                // AJUSTES DE VOZ: Más rápido y claro.
+                utterance.pitch = 1.0;  // Tono natural.
+                utterance.rate = 1.1;   // Ligeramente más rápido para una sensación de mayor agilidad.
 
                 utterance.onend = () => {
                     if (!keepUiBusy) setUIState('idle');
