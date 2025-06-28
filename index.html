@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final Version)</title>
+    <title>Lhuhi - 3D Energy Orb Assistant</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
 
         :root {
-            --glow-color: #00AFFF;
-            --background-start: #0F172A;
+            --glow-color: #9400D3; /* Dark Violet */
+            --accent-color: #00BFFF; /* Deep Sky Blue */
+            --background-start: #000000;
             --background-end: #020617;
             --text-color: #E2E8F0;
             --button-bg: rgba(30, 41, 59, 0.5);
         }
         
         body {
-            background: radial-gradient(circle, var(--background-start) 0%, var(--background-end) 100%);
+            background: var(--background-end);
             margin: 0;
             display: flex;
             justify-content: center;
@@ -26,6 +27,21 @@
             overflow: hidden;
             font-family: 'Poppins', sans-serif;
             color: var(--text-color);
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #animation-canvas {
+            position: absolute;
         }
         
         #ui-container {
@@ -38,48 +54,17 @@
             width: 100%;
             height: 100%;
         }
-        
-        #voice-circle {
-            width: 250px;
-            height: 250px;
-            border-radius: 50%;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: transform 0.5s ease-out;
-        }
-
-        /* The glowing ring effect using pseudo-elements */
-        #voice-circle::before, #voice-circle::after {
-            content: '';
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            border-radius: 50%;
-        }
-
-        #voice-circle::before {
-            z-index: 1;
-            /* The rotating conic gradient that creates the light effect */
-            background: conic-gradient(from var(--angle, 0deg), transparent 50%, var(--glow-color) 90%, transparent);
-            animation: rotate-glow 4s linear infinite;
-        }
-
-        #voice-circle::after {
-            z-index: 0;
-            background: var(--glow-color);
-            filter: blur(50px);
-            opacity: 0.7;
-        }
 
         #status-text {
-            font-size: 2em;
+            position: absolute;
+            font-size: 1.8em;
             font-weight: 300;
             z-index: 2;
             color: var(--text-color);
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            text-shadow: 0 0 15px rgba(0,0,0,0.7);
             transition: all 0.3s;
+            max-width: 80%;
+            text-align: center;
         }
         
         #mic-button {
@@ -94,31 +79,24 @@
             cursor: pointer;
             transition: all 0.3s;
             outline: none;
+            z-index: 3;
         }
         
         #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: var(--glow-color); }
         #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
         #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
-
-        /* --- STATE-BASED ANIMATIONS --- */
-        @keyframes rotate-glow { from { --angle: 0deg; } to { --angle: 360deg; } }
-        @keyframes pulse-speak { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-
-        #voice-circle.listening { transform: scale(1.1); }
-        #voice-circle.speaking { animation: pulse-speak 0.8s ease-in-out infinite; }
         
         @media (max-width: 600px) {
-            #voice-circle { width: 200px; height: 200px; }
-            #status-text { font-size: 1.5em; }
+            #status-text { font-size: 1.3em; }
         }
     </style>
 </head>
 <body>
-
+    <div id="canvas-container">
+        <canvas id="animation-canvas"></canvas>
+    </div>
     <div id="ui-container">
-        <div id="voice-circle">
-            <div id="status-text">Hi</div>
-        </div>
+        <div id="status-text">Hi</div>
         <button id="mic-button" aria-label="Microphone button">
             <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
         </button>
@@ -131,30 +109,112 @@
         
         // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
-        const voiceCircle = document.getElementById('voice-circle');
         const statusText = document.getElementById('status-text');
         
         let recognition;
         let isInitialized = false;
         let isBusy = false;
         let preferredVoice = null;
+
+        // --- CANVAS ANIMATION ---
+        const canvas = document.getElementById('animation-canvas');
+        const ctx = canvas.getContext('2d');
+        const orb = {
+            state: 'idle',
+            radius: 125,
+            particles: [],
+            hue: 200,
+            pulse: 0
+        };
+
+        function setupCanvas() {
+            const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+            canvas.width = size;
+            canvas.height = size;
+            orb.radius = size / 2.5;
+            orb.particles = [];
+            for (let i = 0; i < 50; i++) {
+                orb.particles.push({
+                    angle: Math.random() * Math.PI * 2,
+                    speed: (0.005 + Math.random() * 0.01) * (Math.random() > 0.5 ? 1 : -1),
+                    radius: orb.radius + (Math.random() * 20 - 10),
+                    size: Math.random() * 2 + 1
+                });
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // State-based updates
+            let baseSpeed = 1;
+            let hueShift = 0.5;
+            let glowAlpha = 0.6;
+            let currentRadius = orb.radius;
+
+            if (orb.state === 'listening') {
+                baseSpeed = 3;
+                hueShift = 2;
+                glowAlpha = 1.0;
+                currentRadius = orb.radius * 1.1;
+            } else if (orb.state === 'thinking') {
+                baseSpeed = 10;
+                hueShift = 10;
+                glowAlpha = 1.0;
+            } else if (orb.state === 'speaking') {
+                orb.pulse += 0.2;
+                currentRadius = orb.radius + Math.sin(orb.pulse) * 10;
+            }
+
+            orb.hue = (orb.hue + hueShift) % 360;
+
+            // Draw center orb
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, currentRadius);
+            gradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, currentRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw particles
+            orb.particles.forEach(p => {
+                p.angle += p.speed * baseSpeed * 0.2;
+                const x = centerX + Math.cos(p.angle) * p.radius;
+                const y = centerY + Math.sin(p.angle) * p.radius;
+                const particleHue = (orb.hue + (p.radius - orb.radius) * 5) % 360;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `hsl(${particleHue}, 100%, 70%)`;
+                ctx.shadowColor = `hsl(${particleHue}, 100%, 50%)`;
+                ctx.shadowBlur = 10;
+                ctx.globalAlpha = glowAlpha;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+            });
+            
+            requestAnimationFrame(draw);
+        }
         
-        // --- 🧠 AI SYSTEM PROMPT (THE MOST IMPORTANT FIX) ---
-        const systemInstruction = `You are Lhuhi, a helpful AI assistant.
-        **CRITICAL RULES:**
+        // --- 🧠 AI SYSTEM PROMPT ---
+        const systemInstruction = `You are Lhuhi, an AI assistant.
+        **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Real-Time Data**: When asked for real-time information (like current date, time, weather), you MUST use the provided functions. **DO NOT mention your knowledge cutoff date. DO NOT say you cannot access real-time information.** Just provide the information directly from the function.
-        4.  **Actions**: If a request is an action, your response MUST contain the action's JSON object. Provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
-            - For weather OR time in a specific city (e.g., "weather in London", "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
-            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
-            - For the current date: \`{"action": "get_date"}\`.
-        5.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
+        3.  **Actions**: If a request is an action, your response MUST contain the action's JSON. Provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
+            - Weather/Time in a city: \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
+            - Open URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - Local time: \`{"action": "get_local_time"}\`.
+            - Date: \`{"action": "get_date"}\`.
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Understood. I will always provide real-time data directly from functions without mentioning my training limitations." }] }
+            { role: 'model', parts: [{ text: "Understood. I will use functions for real-time data and respond naturally." }] }
         ];
 
         // --- 🎤 INITIALIZATION ---
@@ -169,7 +229,7 @@
                     recognition.onstart = () => setUIState('listening');
                     recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
-                    recognition.onend = () => { if(voiceCircle.classList.contains('listening')) setUIState('idle', 'Hi'); };
+                    recognition.onend = () => { if(orb.state === 'listening') setUIState('idle', 'Hi'); };
 
                     speechSynthesis.onvoiceschanged = () => {
                         const voices = speechSynthesis.getVoices();
@@ -192,11 +252,16 @@
         }
         
         function setUIState(state, message = '') {
-            voiceCircle.className = 'voice-circle'; // Reset classes
-            voiceCircle.classList.add(state);
+            orb.state = state;
             micButton.disabled = (state !== 'idle');
             
-            statusText.textContent = message || '';
+            switch(state) {
+                case 'idle': statusText.textContent = message || ''; break;
+                case 'listening': statusText.textContent = 'Listening...'; break;
+                case 'thinking': statusText.textContent = message || '...'; break;
+                case 'speaking': statusText.textContent = ''; break;
+                case 'error': statusText.textContent = message || 'An error occurred.'; setTimeout(() => setUIState('idle', 'Hi'), 3000); break;
+            }
         }
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
@@ -213,7 +278,7 @@
             }
             
             isBusy = true;
-            setUIState('thinking', '...');
+            setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
@@ -332,7 +397,7 @@
         // --- 🔊 BROWSER TTS FUNCTION ---
         async function speakAndPlay(text) {
             if (!text || !text.trim() || !('speechSynthesis' in window)) return;
-            setUIState('speaking', '...');
+            setUIState('speaking');
             return new Promise((resolve, reject) => {
                 speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -342,6 +407,12 @@
                 speechSynthesis.speak(utterance);
             });
         }
+        
+        // --- INITIALIZE & START ANIMATION ---
+        setupCanvas();
+        draw();
+        window.addEventListener('resize', setupCanvas);
+
     </script>
 </body>
-</html>
+    </html>
