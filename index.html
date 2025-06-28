@@ -8,20 +8,59 @@
     <style>
         :root {
             --primary-color: #00AFFF; --accent-color: #00FF7F; --glow-color: rgba(0, 175, 255, 0.7);
-            --speaking-glow-color: rgba(0, 175, 255, 0.6); --bg-color: #000; --text-color: #E0E0E0;
+            --bg-color: #100820; /* Darker purple background */ --text-color: #E0E0E0;
             --button-bg: rgba(34, 34, 34, 0.5);
         }
         body { background-color: var(--bg-color); margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; color: var(--text-color); perspective: 1000px; }
         #voice-sphere-container { position: relative; width: 300px; height: 300px; transform-style: preserve-3d; animation: idle-breathe 8s ease-in-out infinite; display: flex; justify-content: center; align-items: center; }
-        #speaking-aura { position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--speaking-glow-color); box-shadow: 0 0 25px 5px var(--speaking-glow-color), inset 0 0 25px 5px var(--speaking-glow-color); transform: scale(0.8); opacity: 0; transition: transform 0.4s ease-out, opacity 0.4s ease-out; }
-        #voice-sphere-container.speaking #speaking-aura { transform: scale(1.1); opacity: 1; }
-        #voice-sphere { position: absolute; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.4s ease-out; }
-        .ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--primary-color); box-shadow: 0 0 10px var(--glow-color), inset 0 0 10px var(--glow-color); background: radial-gradient(circle, rgba(0, 175, 255, 0.1) 0%, rgba(0, 175, 255, 0) 60%); transition: all 0.5s ease-out; }
+        
+        /* --- NEW SIRI-STYLE ORB ANIMATION --- */
+        #siri-orb {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 120%, rgba(150, 100, 255, 0.3), rgba(150, 100, 255, 0) 70%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 0 40px rgba(255, 150, 255, 0.1), 0 0 15px rgba(200, 100, 255, 0.2);
+            overflow: hidden;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            z-index: 1; /* Below the main rings */
+        }
+        
+        #voice-sphere-container.speaking #siri-orb {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .wave {
+            position: absolute;
+            filter: blur(25px); /* This creates the soft, blended look */
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            animation: moveWave 15s ease-in-out infinite alternate;
+        }
+
+        .wave:nth-child(1) { width: 150px; height: 150px; background: #FF6AC1; /* Magenta */ top: 20%; left: 10%; animation-duration: 12s; }
+        .wave:nth-child(2) { width: 200px; height: 200px; background: #6D6AFF; /* Purple */ bottom: 10%; right: 5%; animation-duration: 15s; animation-delay: -3s; }
+        .wave:nth-child(3) { width: 180px; height: 180px; background: #00C2FF; /* Cyan */ top: 5%; right: 15%; animation-duration: 10s; animation-delay: -5s; }
+        .wave:nth-child(4) { width: 160px; height: 160px; background: #A96AFF; /* Light Purple */ bottom: 20%; left: 15%; animation-duration: 18s; animation-delay: -2s; }
+
+        @keyframes moveWave {
+            0% { transform: translate(0, 0) rotate(0deg); border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+            100% { transform: translate(30px, 50px) rotate(360deg); border-radius: 60% 40% 30% 70% / 50% 60% 50% 40%; }
+        }
+        /* --- END OF NEW ANIMATION --- */
+
+
+        #voice-sphere { position: absolute; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.4s ease-out; z-index: 2; }
+        .ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; border: 1px solid var(--primary-color); box-shadow: 0 0 5px var(--glow-color), inset 0 0 5px var(--glow-color); transition: all 0.5s ease-out; }
+        .ring:nth-child(n+4) { border-color: rgba(0, 175, 255, 0.5); } /* Make some rings dimmer */
         .ring:nth-child(1) { transform: rotateY(0deg); } .ring:nth-child(2) { transform: rotateY(30deg); } .ring:nth-child(3) { transform: rotateY(60deg); } .ring:nth-child(4) { transform: rotateY(90deg); } .ring:nth-child(5) { transform: rotateY(120deg); } .ring:nth-child(6) { transform: rotateY(150deg); }
         @keyframes idle-breathe { 0%, 100% { transform: rotateX(15deg) rotateY(0deg); } 50% { transform: rotateX(10deg) rotateY(20deg); } }
         @keyframes think-spin { from { transform: rotateY(0deg) rotateX(20deg); } to { transform: rotateY(360deg) rotateX(20deg); } }
         #voice-sphere-container.thinking #voice-sphere { animation: think-spin 1.2s linear infinite; }
-        #voice-sphere-container.speaking #voice-sphere { transform: scale(0.8); }
         #voice-sphere-container.listening .ring { border-color: var(--accent-color); box-shadow: 0 0 15px var(--accent-color), inset 0 0 15px var(--accent-color); transform: scale(1.1) !important; }
         #status-text { position: absolute; top: 20%; font-size: 1.5em; text-align: center; font-weight: 300; text-shadow: 0 0 10px var(--primary-color); padding: 10px 25px; border-radius: 30px; background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.1); }
         #mic-button { position: absolute; bottom: 60px; background-color: var(--button-bg); border: 2px solid rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); border-radius: 50%; padding: 20px; cursor: pointer; transition: all 0.3s; outline: none; }
@@ -32,7 +71,20 @@
 </head>
 <body>
     <div id="status-text">Press the mic to start</div>
-    <div id="voice-sphere-container"> <div id="speaking-aura"></div> <div id="voice-sphere"> <div class="ring"></div><div class="ring"></div><div class="ring"></div><div class="ring"></div><div class="ring"></div><div class="ring"></div> </div> </div>
+    <div id="voice-sphere-container">
+        <!-- New Siri Orb is here -->
+        <div id="siri-orb">
+            <div class="wave"></div>
+            <div class="wave"></div>
+            <div class="wave"></div>
+            <div class="wave"></div>
+        </div>
+        <!-- Original rings are here -->
+        <div id="voice-sphere">
+            <div class="ring"></div> <div class="ring"></div> <div class="ring"></div>
+            <div class="ring"></div> <div class="ring"></div> <div class="ring"></div>
+        </div>
+    </div>
     <button id="mic-button" aria-label="Microphone button"> <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone"> </button>
 
     <script>
@@ -94,26 +146,20 @@
             }
         }
         
-        // --- UPDATED to find both English and Hindi voices ---
         function setupSpeechSynthesis() {
             return new Promise((resolve) => {
                 const loadVoices = () => {
                     const voices = synthesis.getVoices();
                     if (voices.length > 0) {
-                        // Find best English voice
                         const englishVoiceNames = ['Google US English', 'Samantha', 'Microsoft Zira Desktop - English (United States)'];
                         for (const name of englishVoiceNames) {
                             const found = voices.find(v => v.name === name && v.lang.startsWith('en'));
                             if (found) { preferredEnglishVoice = found; break; }
                         }
                         if (!preferredEnglishVoice) preferredEnglishVoice = voices.find(v => v.lang.startsWith('en-US'));
-                        
-                        // Find best Hindi voice
                         preferredHindiVoice = voices.find(v => v.lang === 'hi-IN' && v.name.includes('Google')) || voices.find(v => v.lang === 'hi-IN');
-
                         if (preferredEnglishVoice) console.log(`✅ English voice: ${preferredEnglishVoice.name}`);
                         if (preferredHindiVoice) console.log(`✅ Hindi voice: ${preferredHindiVoice.name}`);
-                        
                         resolve();
                     }
                 };
@@ -190,16 +236,12 @@
             } catch (error) { console.error("🔴 Weather/Time Error:", error); await speakAndPlay(`Sorry, I couldn't get that information.`); }
         }
 
-        // --- UPDATED with Language Detection ---
         async function speakAndPlay(text, keepUiBusy = false) {
             if (!text.trim()) { if (!keepUiBusy) setUIState('idle'); return; }
             if (synthesis.speaking) synthesis.cancel();
-
             return new Promise((resolve) => {
                 setUIState('speaking');
                 const utterance = new SpeechSynthesisUtterance(text);
-                
-                // Detect language and select the appropriate voice
                 const isHindi = /[\u0900-\u097F]/.test(text);
                 if (isHindi && preferredHindiVoice) {
                     utterance.voice = preferredHindiVoice;
@@ -208,10 +250,8 @@
                     utterance.voice = preferredEnglishVoice;
                     utterance.lang = 'en-US';
                 }
-
                 utterance.pitch = 1.0;
-                utterance.rate = 1.1; // Fast speed for both languages
-
+                utterance.rate = 1.1;
                 utterance.onend = () => { if (!keepUiBusy) setUIState('idle'); resolve(); };
                 utterance.onerror = (e) => {
                     console.error("🔴 Web Speech API Error:", e.error);
