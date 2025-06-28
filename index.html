@@ -158,9 +158,6 @@
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
-        // --- REMOVED ELEVENLABS KEYS ---
-        // const ELEVENLABS_API_KEY = '...';
-        // const ELEVENLABS_VOICE_ID = '...';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE MANAGEMENT ---
@@ -170,9 +167,9 @@
         
         let recognition;
         let audioContext;
-        let isInitialized = false;
-        let synthesis = window.speechSynthesis; // Web Speech API
+        const synthesis = window.speechSynthesis;
         let preferredVoice = null;
+        let isInitialized = false;
         
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
@@ -192,12 +189,9 @@
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
-        function initializeApp() {
+        async function initializeApp() {
             try {
-                // AudioContext is no longer needed for playback, but good for potential future audio processing
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') audioContext.resume();
-                
+                // Setup Speech Recognition
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
@@ -206,63 +200,75 @@
 
                     recognition.onstart = () => setUIState('listening');
                     recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
-                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
+                    recognition.onerror = (event) => {
+                        console.error('🔴 Recognition error:', event.error);
+                        if (event.error !== 'no-speech') {
+                             setUIState('error', "Voice error.");
+                        } else {
+                             setUIState('idle');
+                        }
+                    };
                     recognition.onend = () => { if(sphereContainer.classList.contains('listening')) setUIState('idle'); };
                 } else {
-                    setUIState('error', "Browser not supported."); return;
+                    setUIState('error', "Browser not supported.");
+                    return;
                 }
                 
-                // Load and select the best available voice
-                loadAndSelectVoice();
-                if (synthesis.onvoiceschanged !== undefined) {
-                    synthesis.onvoiceschanged = loadAndSelectVoice;
-                }
-
+                // Setup Speech Synthesis (The critical fix is here)
+                await setupSpeechSynthesis();
+                
                 isInitialized = true;
                 setUIState('idle');
-                console.log("✅ System Initialized.");
+                console.log("✅ System Initialized and Voices are Ready.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
-                setUIState('error', "Initialization failed.");
+                setUIState('error', "Could not initialize voice.");
             }
         }
         
-        // --- VOICE SELECTION LOGIC ---
-        function loadAndSelectVoice() {
-            const voices = synthesis.getVoices();
-            if (!voices.length) { return; }
+        // --- 🔊 ROBUST VOICE LOADING FUNCTION ---
+        function setupSpeechSynthesis() {
+            return new Promise((resolve, reject) => {
+                const loadVoices = () => {
+                    const voices = synthesis.getVoices();
+                    if (voices.length > 0) {
+                        selectVoice(voices);
+                        if (preferredVoice) {
+                            console.log(`✅ Voice selected: ${preferredVoice.name} (${preferredVoice.lang})`);
+                            resolve();
+                        } else {
+                            console.warn("⚠️ Could not find a preferred female English voice. Using browser default.");
+                            resolve(); // Resolve anyway, letting the browser pick a default
+                        }
+                    }
+                };
 
-            // Prioritized list of high-quality female English voices
-            const preferredVoiceNames = [
-                'Google US English', // Common on Chrome/Android
-                'Samantha',          // Default on macOS/iOS
-                'Microsoft Zira Desktop - English (United States)', // Common on Windows
-                'Google UK English Female',
-                'en-US' // Fallback to any US English voice
-            ];
-
-            for (const name of preferredVoiceNames) {
-                const foundVoice = voices.find(voice => 
-                    voice.name === name && voice.lang.startsWith('en')
-                );
-                if (foundVoice) {
-                    preferredVoice = foundVoice;
-                    break;
+                if (synthesis.getVoices().length > 0) {
+                    loadVoices();
+                } else {
+                    synthesis.onvoiceschanged = loadVoices;
+                    setTimeout(() => {
+                        if (!preferredVoice && synthesis.getVoices().length === 0) {
+                            reject(new Error("Voice loading timed out."));
+                        }
+                    }, 3000);
                 }
-            }
-            
-            // Generic fallback if no preferred voices are found
-            if (!preferredVoice) {
-                 preferredVoice = voices.find(voice => voice.lang.startsWith('en') && voice.name.includes('Female')) || voices.find(voice => voice.lang.startsWith('en-US'));
-            }
-
-            if (preferredVoice) {
-                console.log(`✅ Voice selected: ${preferredVoice.name} (${preferredVoice.lang})`);
-            } else {
-                console.warn("⚠️ Could not find a preferred voice. Using browser default.");
-            }
+            });
         }
 
+        function selectVoice(voices) {
+            const preferredVoiceNames = [
+                'Google US English', 'Samantha', 'Microsoft Zira Desktop - English (United States)', 'Google UK English Female',
+            ];
+            for (const name of preferredVoiceNames) {
+                const foundVoice = voices.find(voice => voice.name === name && voice.lang.startsWith('en'));
+                if (foundVoice) {
+                    preferredVoice = foundVoice;
+                    return;
+                }
+            }
+            preferredVoice = voices.find(voice => voice.lang.startsWith('en') && /female/i.test(voice.name)) || voices.find(voice => voice.lang.startsWith('en-US'));
+        }
 
         // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
@@ -272,40 +278,32 @@
             micButton.disabled = (state === 'thinking' || state === 'speaking');
             
             switch(state) {
-                case 'idle':
-                    statusText.textContent = message || 'Press the mic to speak';
-                    break;
-                case 'listening':
-                    statusText.textContent = 'Listening...';
-                    break;
-                case 'thinking':
-                    statusText.textContent = 'Thinking...';
-                    break;
-                case 'speaking':
-                    statusText.textContent = 'Speaking...';
-                    break;
+                case 'idle': statusText.textContent = message || 'Press the mic to speak'; break;
+                case 'listening': statusText.textContent = 'Listening...'; break;
+                case 'thinking': statusText.textContent = 'Thinking...'; break;
+                case 'speaking': statusText.textContent = 'Speaking...'; break;
                 case 'error':
                     statusText.textContent = message || 'An error occurred.';
-                    setTimeout(() => setUIState('idle'), 3000); // Reset after error
-                    break;
+                    setTimeout(() => setUIState('idle'), 3000); break;
             }
         }
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
-        micButton.addEventListener('click', () => {
+        micButton.addEventListener('click', async () => {
             if (micButton.disabled) return;
-            // First click initializes everything
-            if (!isInitialized) { 
-                initializeApp(); 
-                // A small delay to allow voices to load on some browsers before the first speech attempt.
-                setTimeout(() => { if (recognition) recognition.start(); }, 250);
-                return;
-            }
-            if (recognition) {
-                 // Cancel any ongoing speech before listening again
-                if (synthesis.speaking) {
-                    synthesis.cancel();
+
+            if (!isInitialized) {
+                setUIState('thinking', 'Initializing...');
+                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') await audioContext.resume();
+                
+                await initializeApp();
+                
+                if(isInitialized) {
+                    recognition.start();
                 }
+            } else {
+                if (synthesis.speaking) synthesis.cancel();
                 recognition.start();
             }
         });
@@ -313,7 +311,7 @@
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
-                setUIState('error', "Didn't catch that."); return;
+                setUIState('idle'); return;
             }
             
             setUIState('thinking');
@@ -326,7 +324,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: conversationHistory }),
                 });
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
                 
                 const result = await response.json();
                 const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -346,13 +344,13 @@
                     await handleAction(action, userQuery, textToSpeak);
                 } else if (textToSpeak) {
                     await speakAndPlay(textToSpeak);
+                } else {
+                    setUIState('idle');
                 }
 
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
-            } finally {
-                setUIState('idle');
             }
         }
         
@@ -364,10 +362,8 @@
         // --- 🚀 ACTION HANDLER ---
         async function handleAction(action, userQuery, spokenConfirmation) {
             try {
-                if (spokenConfirmation) {
-                    await speakAndPlay(spokenConfirmation);
-                }
-
+                if (spokenConfirmation) await speakAndPlay(spokenConfirmation);
+                
                 switch (action.action) {
                     case 'open_url':
                         if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
@@ -377,14 +373,9 @@
                         const purpose = userQuery.toLowerCase().includes('time') ? 'time' : 'weather';
                         await getInfoForCity(action.location, purpose);
                         break;
-                    case 'get_local_time':
-                        await handleLocalTime();
-                        break;
-                    case 'get_date':
-                        await handleDate();
-                        break;
-                    default:
-                        throw new Error("Unknown action.");
+                    case 'get_local_time': await handleLocalTime(); break;
+                    case 'get_date': await handleDate(); break;
+                    default: throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -435,47 +426,38 @@
                 }
             } catch (error) {
                 console.error("🔴 Weather/Location Error:", error);
-                await speakAndPlay(`Sorry, I couldn't get the information. ${error.message}`);
+                await speakAndPlay(`Sorry, I couldn't get the information for that location.`);
             }
         }
 
-        // --- 🔊 NEW & IMPROVED TTS & PLAYBACK FUNCTION using Web Speech API ---
+        // --- 🔊 TTS & PLAYBACK FUNCTION using Web Speech API ---
         async function speakAndPlay(text) {
-            if (!text || !text.trim() || !synthesis) return;
-            
-            // If the browser is already speaking, stop it before starting a new utterance.
-            if (synthesis.speaking) {
-                synthesis.cancel();
+            if (!text || !text.trim() || !synthesis) {
+                 setUIState('idle');
+                 return;
             }
+            if (synthesis.speaking) synthesis.cancel();
 
             return new Promise((resolve, reject) => {
                 setUIState('speaking');
-                
                 const utterance = new SpeechSynthesisUtterance(text);
-                
-                // Assign the best voice we found during initialization
-                if (preferredVoice) {
-                    utterance.voice = preferredVoice;
-                }
-                
-                // Optional: Adjust pitch and rate for a more natural feel
+                if (preferredVoice) utterance.voice = preferredVoice;
                 utterance.pitch = 1;
                 utterance.rate = 1;
 
                 utterance.onend = () => {
-                    console.log("✅ Speech finished successfully.");
+                    setUIState('idle');
                     resolve();
                 };
-                
                 utterance.onerror = (event) => {
                     console.error("🔴 Web Speech API Error:", event.error);
                     setUIState('error', 'Voice synthesis failed.');
                     reject(event.error);
                 };
-                
                 synthesis.speak(utterance);
             });
         }
     </script>
+
 </body>
 </html>
