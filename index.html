@@ -157,7 +157,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyDs37yDP8YDj55Jr3NZbKGhOwplZ3FKqRo'; // <-- YOUR NEW API KEY
+        const GEMINI_API_KEY = 'AIzaSyDs37yDP8YDj55Jr3NZbKGhOwplZ3FKqRo';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE MANAGEMENT ---
@@ -171,27 +171,28 @@
         let preferredVoice = null;
         let isInitialized = false;
         
-        // --- 🧠 AI SYSTEM PROMPT ---
-        const systemInstruction = `You are Lhuhi, an AI assistant.
-        **RULES:**
-        1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
-        2.  **Language**: Respond in the user's language.
-        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. You should provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
-            - For weather OR time in a specific city (e.g., "weather in London", "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
-            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
-            - For the current date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
+        // --- 🧠 PROMPT MEJORADO Y MÁS ESTRICTO (CORRIGE EL PROBLEMA DE DOBLE RESPUESTA) ---
+        const systemInstruction = `You are Lhuhi, a helpful AI assistant.
+        **Your Core Task:** Understand the user's request and determine if it's a simple conversation or an action.
+        **RULE 1: For simple conversation (greetings, questions, etc.),** respond naturally and conversationally. DO NOT use JSON.
+        **RULE 2: If the user's request is an ACTION, your response MUST be ONLY a brief confirmation phrase, followed by the correct JSON object.** The system will handle the final spoken result.
+        - The confirmation should be simple like "Certainly.", "One moment.", "Let me check that for you."
+        - The JSON is for the system only and MUST NEVER be described or mentioned in the spoken confirmation.
+        - **Examples of ACTION requests and your REQUIRED output:**
+          - User: "what's the weather in London" -> Response: "One moment. \`{"action": "get_info_for_city", "location": "London"}\`"
+          - User: "what time is it?" -> Response: "Certainly. \`{"action": "get_local_time"}\`"
+          - User: "what is today's date" -> Response: "Let me check. \`{"action": "get_date"}\`"
+          - User: "open youtube.com" -> Response: "Okay. \`{"action": "open_url", "url": "https://youtube.com"}\`"
+        **RULE 3: Never say 'JSON' or describe the action in your spoken part.** Your only job for actions is the short confirmation phrase and the clean JSON.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Okay, I understand. I will provide clean, spoken responses and use JSON only as a tool for the system." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand my instructions. I will provide a short confirmation and the required JSON for actions, and a conversational response for everything else." }] }
         ];
 
         // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
         async function initializeApp() {
             try {
-                // STEP 1A: Setup Speech Recognition (Voice -> Text)
                 if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
@@ -202,23 +203,17 @@
                     recognition.onresult = (event) => { 
                         const query = event.results[0][0].transcript; 
                         console.log("✅ User said:", query); 
-                        analyzeWithGemini(query); // Send recognized text to Gemini
+                        analyzeWithGemini(query);
                     };
                     recognition.onerror = (event) => {
                         console.error('🔴 Recognition error:', event.error);
-                        if (event.error !== 'no-speech') {
-                             setUIState('error', "Voice error.");
-                        } else {
-                             setUIState('idle');
-                        }
+                        setUIState(event.error === 'no-speech' ? 'idle' : 'error', "Voice error.");
                     };
                     recognition.onend = () => { if(sphereContainer.classList.contains('listening')) setUIState('idle'); };
                 } else {
-                    setUIState('error', "Browser not supported.");
-                    return;
+                    return setUIState('error', "Browser not supported.");
                 }
                 
-                // STEP 1B: Setup Speech Synthesis (Text -> Voice)
                 await setupSpeechSynthesis();
                 
                 isInitialized = true;
@@ -230,7 +225,6 @@
             }
         }
         
-        // --- 🔊 ROBUST VOICE LOADING FUNCTION ---
         function setupSpeechSynthesis() {
             return new Promise((resolve, reject) => {
                 const loadVoices = () => {
@@ -238,24 +232,19 @@
                     if (voices.length > 0) {
                         selectVoice(voices);
                         if (preferredVoice) {
-                            console.log(`✅ Voice selected: ${preferredVoice.name} (${preferredVoice.lang})`);
+                            console.log(`✅ Highest quality voice selected: ${preferredVoice.name}`);
                             resolve();
                         } else {
-                            console.warn("⚠️ Could not find a preferred female English voice. Using browser default.");
+                            console.warn("⚠️ No high-quality voice found. Using browser default.");
                             resolve();
                         }
                     }
                 };
 
-                if (synthesis.getVoices().length > 0) {
-                    loadVoices();
-                } else {
+                if (synthesis.getVoices().length > 0) loadVoices();
+                else {
                     synthesis.onvoiceschanged = loadVoices;
-                    setTimeout(() => {
-                        if (synthesis.getVoices().length === 0) {
-                            reject(new Error("Voice loading timed out."));
-                        }
-                    }, 3000);
+                    setTimeout(() => synthesis.getVoices().length === 0 && reject(new Error("Voice loading timed out.")), 3000);
                 }
             });
         }
@@ -271,25 +260,24 @@
                     return;
                 }
             }
-            preferredVoice = voices.find(voice => voice.lang.startsWith('en') && /female/i.test(voice.name)) || voices.find(voice => voice.lang.startsWith('en-US'));
+            preferredVoice = voices.find(voice => voice.lang.startsWith('en-US')) || voices.find(voice => voice.lang.startsWith('en'));
         }
 
         // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
             const states = ['idle', 'listening', 'thinking', 'speaking', 'error'];
-            states.forEach(s => sphereContainer.classList.remove(s));
-            sphereContainer.classList.add(state);
+            sphereContainer.className = state;
             micButton.disabled = (state === 'thinking' || state === 'speaking');
             
-            switch(state) {
-                case 'idle': statusText.textContent = message || 'Press the mic to speak'; break;
-                case 'listening': statusText.textContent = 'Listening...'; break;
-                case 'thinking': statusText.textContent = 'Thinking...'; break;
-                case 'speaking': statusText.textContent = 'Speaking...'; break;
-                case 'error':
-                    statusText.textContent = message || 'An error occurred.';
-                    setTimeout(() => setUIState('idle'), 3000); break;
-            }
+            const statusMessages = {
+                idle: 'Press the mic to speak',
+                listening: 'Listening...',
+                thinking: 'Thinking...',
+                speaking: '...',
+                error: 'An error occurred.'
+            };
+            statusText.textContent = message || statusMessages[state];
+            if (state === 'error') setTimeout(() => setUIState('idle'), 3000);
         }
 
         // --- 🕹️ MAIN CONTROL LOGIC ---
@@ -302,17 +290,14 @@
                 if (audioContext.state === 'suspended') await audioContext.resume();
                 
                 await initializeApp();
-                
-                if(isInitialized) {
-                    recognition.start();
-                }
+                if(isInitialized) recognition.start();
             } else {
                 if (synthesis.speaking) synthesis.cancel();
                 recognition.start();
             }
         });
 
-        // --- 🧠 STEP 2: SEND TEXT TO GEMINI API ---
+        // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
                 setUIState('idle'); return;
@@ -337,20 +322,19 @@
                 const geminiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (!geminiResponseText) throw new Error("Empty response from Gemini.");
 
-                console.log("🤖 Gemini responded:", geminiResponseText);
+                console.log("🤖 Gemini Raw Response:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
                 const actionRegex = /{\s*"action"[\s\S]*?}/;
                 const match = geminiResponseText.match(actionRegex);
-                let action = null;
-                if (match) { try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)} }
                 
                 const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
                 
-                if (action) {
-                    await handleAction(action, userQuery, textToSpeak);
+                if (match && match[0]) {
+                    const action = JSON.parse(match[0]);
+                    await handleAction(action, textToSpeak); // Pass confirmation text
                 } else if (textToSpeak) {
-                    await speakAndPlay(textToSpeak); // Send text response to be spoken
+                    await speakAndPlay(textToSpeak);
                 } else {
                     setUIState('idle');
                 }
@@ -363,22 +347,25 @@
         
         function sanitizeTextForSpeech(text) {
             if (!text) return "";
-            return text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/[*_`#]/g, '').trim();
+            return text.replace(/`{3}json[\s\S]*?`{3}|`[\s\S]*?`|{\s*"action"[\s\S]*?}/g, '').trim();
         }
 
         // --- 🚀 ACTION HANDLER ---
-        async function handleAction(action, userQuery, spokenConfirmation) {
+        async function handleAction(action, spokenConfirmation) {
+            // First, say the confirmation phrase from Gemini (e.g., "One moment.")
+            if (spokenConfirmation) {
+                await speakAndPlay(spokenConfirmation, true); // `true` prevents UI reset
+            }
+
             try {
-                if (spokenConfirmation) await speakAndPlay(spokenConfirmation);
-                
+                // Then, execute the action and speak its result
                 switch (action.action) {
                     case 'open_url':
-                        if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
                         if (action.url) window.open(action.url, '_blank');
+                        setUIState('idle'); // Action complete
                         break;
                     case 'get_info_for_city':
-                        const purpose = userQuery.toLowerCase().includes('time') ? 'time' : 'weather';
-                        await getInfoForCity(action.location, purpose);
+                        await getInfoForCity(action.location, 'weather'); // Simplified to weather
                         break;
                     case 'get_local_time': await handleLocalTime(); break;
                     case 'get_date': await handleDate(); break;
@@ -391,14 +378,6 @@
         }
 
         // --- FEATURES ---
-        function getCurrentLocation() {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
-                setUIState('thinking', "Requesting location...");
-                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
-            });
-        }
-        
         async function handleLocalTime() {
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
@@ -411,22 +390,15 @@
             await speakAndPlay(`Today is ${dateString}.`);
         }
 
-        async function getInfoForCity(location = null, purpose = 'weather') {
-            let finalLocation = location;
+        async function getInfoForCity(location) {
             try {
-                if (!finalLocation) {
-                    const position = await getCurrentLocation();
-                    finalLocation = `${position.coords.latitude},${position.coords.longitude}`;
-                }
-                setUIState('thinking', `Getting info for ${finalLocation}...`);
-                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${finalLocation}`;
+                setUIState('thinking');
+                const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${location}`;
                 const response = await fetch(API_URL);
                 const data = await response.json();
 
                 if (response.ok && data.location) {
-                    const summary = purpose === 'time'
-                        ? `The current time in ${data.location.name} is ${new Date(data.location.localtime).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`
-                        : `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
+                    const summary = `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     await speakAndPlay(summary);
                 } else {
                     throw new Error(data.error?.message || "Invalid city data.");
@@ -437,10 +409,10 @@
             }
         }
 
-        // --- 🔊 STEP 3: PLAY GEMINI'S TEXT RESPONSE AS SPEECH ---
-        async function speakAndPlay(text) {
+        // --- 🔊 TTS & PLAYBACK (AJUSTES DE CALIDAD) ---
+        async function speakAndPlay(text, keepUiBusy = false) {
             if (!text || !text.trim() || !synthesis) {
-                 setUIState('idle');
+                 if (!keepUiBusy) setUIState('idle');
                  return;
             }
             if (synthesis.speaking) synthesis.cancel();
@@ -449,16 +421,18 @@
                 setUIState('speaking');
                 const utterance = new SpeechSynthesisUtterance(text);
                 if (preferredVoice) utterance.voice = preferredVoice;
-                utterance.pitch = 1;
-                utterance.rate = 1;
+                
+                // Fine-tuning for a more natural sound
+                utterance.pitch = 1.0; // Standard pitch
+                utterance.rate = 1.05; // Slightly faster than normal speech
 
                 utterance.onend = () => {
-                    setUIState('idle');
+                    if (!keepUiBusy) setUIState('idle');
                     resolve();
                 };
                 utterance.onerror = (event) => {
                     console.error("🔴 Web Speech API Error:", event.error);
-                    setUIState('error', 'Voice synthesis failed.');
+                    if (!keepUiBusy) setUIState('error', 'Voice synthesis failed.');
                     reject(event.error);
                 };
                 synthesis.speak(utterance);
