@@ -3,22 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - 3D Hyper Assistant (Final Version)</title>
+    <title>Lhuhi - 3D AI Assistant (Final Version)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
 
         :root {
-            --primary-color: #00BFFF; /* Deep Sky Blue */
+            --primary-color: #4D94FF; /* A more vibrant blue */
             --accent-color: #00FF7F;  /* Spring Green */
-            --glow-color: rgba(0, 191, 255, 0.8);
+            --glow-color: rgba(77, 148, 255, 0.7);
             --core-glow: #FFFFFF;
-            --bg-color: #02041B; /* Deep Space Blue */
+            --bg-color-start: #01041D;
+            --bg-color-end: #000000;
             --text-color: #EAEAEA;
         }
         
         body {
-            background-color: var(--bg-color);
+            background: radial-gradient(circle, var(--bg-color-start) 0%, var(--bg-color-end) 100%);
             margin: 0;
             display: flex;
             justify-content: center;
@@ -27,16 +28,7 @@
             overflow: hidden;
             font-family: 'Poppins', sans-serif;
             color: var(--text-color);
-            perspective: 1200px;
-        }
-        
-        #particle-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
+            perspective: 1500px; /* Enhanced 3D effect */
         }
         
         #ui-container {
@@ -55,7 +47,7 @@
             width: 300px;
             height: 300px;
             transform-style: preserve-3d;
-            animation: idle-rotate 25s linear infinite;
+            animation: idle-float 12s ease-in-out infinite;
         }
 
         #voice-orb {
@@ -63,6 +55,7 @@
             width: 100%;
             height: 100%;
             transform-style: preserve-3d;
+            transform: rotateX(60deg); /* Angled view */
             transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1);
         }
         
@@ -71,37 +64,64 @@
             top: 0; left: 0;
             width: 100%; height: 100%;
             border-radius: 50%;
-            border: 1.5px solid var(--primary-color);
-            opacity: 0.7;
+            border: 2px solid transparent;
+            /* NEW: Iridescent / Prism effect */
+            background: conic-gradient(from var(--angle, 0deg), #ff007f, #00ffff, #7f00ff, #ffff00, #ff007f) border-box;
+            mask:
+                linear-gradient(#fff 0 0) content-box, 
+                linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            opacity: 0.8;
             transition: all 0.6s ease-out;
+            animation: ring-rotate 20s linear infinite;
         }
 
-        .ring-outer { transform: rotateY(0deg) rotateX(90deg) scale(1); filter: drop-shadow(0 0 5px var(--glow-color)); }
-        .ring-inner { transform: rotateY(0deg) rotateX(90deg) scale(0.7); border-style: dashed; }
-        .ring-vertical { transform: rotateY(90deg) scale(1); }
+        .ring-1 { transform: rotateZ(0deg) scale(1); animation-duration: 22s; }
+        .ring-2 { transform: rotateZ(60deg) scale(0.8); animation-duration: 25s; animation-direction: reverse; }
+        .ring-3 { transform: rotateZ(120deg) scale(0.6); animation-duration: 28s; }
+
+        @property --angle {
+            syntax: '<angle>';
+            initial-value: 0deg;
+            inherits: false;
+        }
+
+        @keyframes ring-rotate {
+            to { --angle: 360deg; }
+        }
 
         #core {
             position: absolute;
             top: 50%; left: 50%;
-            width: 50px; height: 50px;
+            width: 60px; height: 60px;
             background: var(--core-glow);
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 20px 5px var(--core-glow);
+            box-shadow: 0 0 25px 8px var(--core-glow), 0 0 40px 15px var(--primary-color);
             transition: all 0.5s ease-out;
         }
         
         /* --- STATE-BASED ANIMATIONS --- */
-        @keyframes idle-rotate { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
-        @keyframes speak-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 20px 5px var(--core-glow); } 50% { transform: scale(1.2); box-shadow: 0 0 35px 15px var(--core-glow); } }
+        @keyframes idle-float {
+            0%, 100% { transform: translateY(0px) rotateY(0deg); }
+            50% { transform: translateY(-20px) rotateY(20deg); }
+        }
         
-        #voice-orb-container.listening #voice-orb { transform: scale(1.15) rotateX(20deg); }
-        #voice-orb-container.listening .ring { border-color: var(--accent-color); filter: drop-shadow(0 0 8px var(--accent-color)); }
+        @keyframes speak-pulse-core {
+             0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 25px 8px var(--core-glow), 0 0 40px 15px var(--primary-color); }
+             50% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 35px 15px var(--core-glow), 0 0 55px 25px var(--primary-color); }
+        }
         
-        #voice-orb-container.thinking #voice-orb { animation: idle-rotate 1.5s linear infinite; }
-        #voice-orb-container.thinking .ring { animation: idle-rotate 2s linear infinite reverse; }
+        @keyframes thinking-spin-orb {
+            from { transform: rotateX(60deg) rotateZ(0deg); }
+            to { transform: rotateX(60deg) rotateZ(360deg); }
+        }
 
-        #voice-orb-container.speaking #core { animation: speak-pulse 0.5s ease-in-out infinite; }
+        #voice-orb-container.listening #voice-orb { transform: rotateX(0deg) scale(1.1); }
+        #voice-orb-container.listening .ring { border: 2px solid var(--accent-color); }
+        
+        #voice-orb-container.thinking #voice-orb { animation: thinking-spin-orb 1.2s linear infinite; }
+        #voice-orb-container.speaking #core { animation: speak-pulse-core 0.5s ease-in-out infinite; }
         
         #status-text {
             position: absolute;
@@ -138,14 +158,13 @@
 </head>
 <body>
 
-    <canvas id="particle-canvas"></canvas>
     <div id="ui-container">
         <div id="status-text">Press the mic to start</div>
         <div id="voice-orb-container">
             <div id="voice-orb">
-                <div class="ring ring-outer"></div>
-                <div class="ring ring-inner"></div>
-                <div class="ring ring-vertical"></div>
+                <div class="ring ring-1"></div>
+                <div class="ring ring-2"></div>
+                <div class="ring ring-3"></div>
                 <div id="core"></div>
             </div>
         </div>
@@ -200,7 +219,6 @@
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
                     recognition.onend = () => { if(orbContainer.classList.contains('listening')) setUIState('idle'); };
 
-                    // Find a better voice
                     speechSynthesis.onvoiceschanged = () => {
                         const voices = speechSynthesis.getVoices();
                         preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
@@ -221,12 +239,10 @@
             }
         }
         
-        // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
-            const states = ['idle', 'listening', 'thinking', 'speaking', 'error'];
-            states.forEach(s => orbContainer.classList.remove(s));
+            orbContainer.className = 'voice-orb-container'; // Reset classes
             orbContainer.classList.add(state);
-            micButton.disabled = (state === 'thinking' || state === 'speaking' || state === 'listening');
+            micButton.disabled = (state !== 'idle');
             
             switch(state) {
                 case 'idle': statusText.textContent = message || 'Press the mic to speak'; break;
@@ -372,6 +388,7 @@
             if (!text || !text.trim() || !('speechSynthesis' in window)) return;
             setUIState('speaking');
             return new Promise((resolve, reject) => {
+                speechSynthesis.cancel(); // Cancel any previous speech
                 const utterance = new SpeechSynthesisUtterance(text);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 utterance.onend = resolve;
@@ -379,60 +396,6 @@
                 speechSynthesis.speak(utterance);
             });
         }
-        
-        // --- 3D PARTICLE BACKGROUND SCRIPT ---
-        const canvas = document.getElementById('particle-canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        let particles = [];
-        const particleCount = 100;
-
-        class Particle {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.size = Math.random() * 2 + 1;
-                this.speedX = (Math.random() * 0.5 - 0.25);
-                this.speedY = (Math.random() * 0.5 - 0.25);
-                this.color = `rgba(0, 191, 255, ${Math.random() * 0.5 + 0.2})`;
-            }
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
-                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
-            }
-            draw() {
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        function initParticles() {
-            for (let i = 0; i < particleCount; i++) {
-                particles.push(new Particle());
-            }
-        }
-
-        function animateParticles() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let i = 0; i < particles.length; i++) {
-                particles[i].update();
-                particles[i].draw();
-            }
-            requestAnimationFrame(animateParticles);
-        }
-        initParticles();
-        animateParticles();
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            particles = [];
-            initParticles();
-        });
     </script>
 </body>
-</html>
+    </html>
