@@ -3,176 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final Corrected Version)</title>
+    <title>Lhuhi - Hyper-Realistic 3D Assistant</title>
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
-
         :root {
-            --background-start: #0F172A;
-            --background-end: #020617;
-            --text-color: #E2E8F0;
-            --button-bg: rgba(30, 41, 59, 0.5);
+            --primary-color: #00AFFF; /* Electric Blue */
+            --accent-color: #00FF7F; /* Spring Green */
+            --glow-color: rgba(0, 175, 255, 0.7);
+            --bg-color: #000;
+            --text-color: #E0E0E0;
+            --button-bg: rgba(34, 34, 34, 0.5);
         }
         
         body {
-            background: radial-gradient(circle, var(--background-start) 0%, var(--background-end) 100%);
+            background-color: var(--bg-color);
             margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             overflow: hidden;
-            font-family: 'Poppins', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             color: var(--text-color);
-            perspective: 1000px;
+            perspective: 1000px; /* Essential for 3D transforms */
         }
         
-        #ui-container {
+        /* Main container for the 3D sphere */
+        #voice-sphere-container {
             position: relative;
-            z-index: 2;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
-        }
-        
-        #voice-circle {
             width: 300px;
             height: 300px;
-            border-radius: 50%;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-            border: 2px solid transparent;
-            background: 
-                radial-gradient(circle at center, rgba(15, 23, 42, 0.8) 0%, transparent 70%),
-                conic-gradient(from var(--angle, 0deg), #f0f, #0ff, #ff0, #f0f) border-box;
-            background-clip: padding-box, border-box;
-            background-origin: padding-box, border-box;
-            box-shadow: 0 0 20px 5px #0ff4, 0 0 20px 5px #f0f4;
+            transform-style: preserve-3d;
+            animation: idle-breathe 8s ease-in-out infinite;
         }
 
+        #voice-sphere {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease-out;
+        }
+        
+        /* The rings that make up the sphere */
+        .ring {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 10px var(--glow-color), inset 0 0 10px var(--glow-color);
+            background: radial-gradient(circle, rgba(0, 175, 255, 0.1) 0%, rgba(0, 175, 255, 0) 60%);
+            transition: all 0.5s ease-out;
+        }
+
+        /* Arranging rings in a 3D sphere shape */
+        .ring:nth-child(1) { transform: rotateY(0deg); }
+        .ring:nth-child(2) { transform: rotateY(30deg); }
+        .ring:nth-child(3) { transform: rotateY(60deg); }
+        .ring:nth-child(4) { transform: rotateY(90deg); }
+        .ring:nth-child(5) { transform: rotateY(120deg); }
+        .ring:nth-child(6) { transform: rotateY(150deg); }
+        
+        /* --- STATE-BASED ANIMATIONS --- */
+        @keyframes idle-breathe {
+            0%, 100% { transform: rotateX(15deg) rotateY(0deg) scale(1); }
+            50% { transform: rotateX(10deg) rotateY(20deg) scale(1.02); }
+        }
+
+        @keyframes think-spin {
+            from { transform: rotateY(0deg) rotateX(20deg); }
+            to { transform: rotateY(360deg) rotateX(20deg); }
+        }
+        
+        @keyframes speak-pulse {
+            0%, 100% { transform: scale3d(1, 1, 1); }
+            50% { transform: scale3d(1.05, 1.05, 1.05); }
+        }
+
+        /* Applying animations based on class */
+        #voice-sphere-container.thinking #voice-sphere {
+            animation: think-spin 1.2s linear infinite;
+        }
+
+        #voice-sphere-container.speaking #voice-sphere {
+            animation: speak-pulse 0.8s ease-in-out infinite;
+        }
+
+        #voice-sphere-container.listening .ring {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px var(--accent-color), inset 0 0 15px var(--accent-color);
+            transform: scale(1.1) !important; /* Force scale on listening */
+        }
+
+        /* UI elements */
         #status-text {
+            position: absolute;
+            top: 20%;
             font-size: 1.5em;
             font-weight: 300;
-            z-index: 2;
-            color: var(--text-color);
-            text-shadow: 0 0 10px rgba(0,0,0,0.5);
-            transition: all 0.3s;
-            max-width: 80%;
-            text-align: center;
-            line-height: 1.4;
+            text-shadow: 0 0 10px var(--primary-color);
+            padding: 10px 25px;
+            border-radius: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         #mic-button {
             position: absolute;
-            bottom: 15%;
-            background: var(--button-bg);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            bottom: 60px;
+            background-color: var(--button-bg);
+            border: 2px solid rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(10px);
             border-radius: 50%;
-            width: 80px; height: 80px;
-            display: flex; justify-content: center; align-items: center;
+            padding: 20px;
             cursor: pointer;
             transition: all 0.3s;
             outline: none;
         }
         
-        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: #0ff; }
+        #mic-button:hover:not(:disabled) {
+            transform: scale(1.1);
+            border-color: var(--primary-color);
+        }
+        
         #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
-        #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
+        #mic-icon { width: 50px; height: 50px; display: block; filter: invert(0.9); }
 
-        /* --- STATE-BASED ANIMATIONS --- */
-        @property --angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
-        @keyframes spin { to { --angle: 360deg; } }
-        @keyframes vibrate { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(2px, -2px); } 50% { transform: translate(0, 0); } 75% { transform: translate(-2px, 2px); } }
-        
-        #voice-circle.idle { animation: spin 10s linear infinite; }
-        #voice-circle.listening { transform: scale(1.1); animation: spin 2s linear infinite; }
-        #voice-circle.thinking { animation: vibrate 0.1s linear infinite; }
-        #voice-circle.speaking { animation: spin 1.5s linear infinite; }
-        
         @media (max-width: 600px) {
-            #voice-circle { width: 250px; height: 250px; }
-            #status-text { font-size: 1.2em; }
+            #voice-sphere-container { width: 220px; height: 220px; }
+            #status-text { font-size: 1.1em; top: 25%; }
         }
     </style>
 </head>
 <body>
 
-    <div id="ui-container">
-        <div id="voice-circle" class="idle">
-            <div id="status-text">Hi</div>
+    <div id="status-text">Press the mic to start</div>
+    <div id="voice-sphere-container">
+        <div id="voice-sphere">
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="ring"></div>
         </div>
-        <button id="mic-button" aria-label="Microphone button">
-            <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
-        </button>
     </div>
+    <button id="mic-button" aria-label="Microphone button">
+        <img id="mic-icon" src="https://img.icons8.com/ios-filled/100/microphone.png" alt="Microphone">
+    </button>
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
+        // --- REMOVED ELEVENLABS KEYS ---
+        // const ELEVENLABS_API_KEY = '...';
+        // const ELEVENLABS_VOICE_ID = '...';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
-        // --- DOM & STATE ---
+        // --- DOM & STATE MANAGEMENT ---
         const micButton = document.getElementById('mic-button');
-        const voiceCircle = document.getElementById('voice-circle');
+        const sphereContainer = document.getElementById('voice-sphere-container');
         const statusText = document.getElementById('status-text');
         
         let recognition;
+        let audioContext;
         let isInitialized = false;
-        let isBusy = false;
+        let synthesis = window.speechSynthesis; // Web Speech API
         let preferredVoice = null;
         
-        // --- 🧠 AI SYSTEM PROMPT (THE MOST IMPORTANT FIX) ---
+        // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
-        **CRITICAL RULES:**
+        **RULES:**
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
-        3.  **Real-Time Actions**: When asked for real-time information (like current date, time, weather), you MUST respond ONLY with the action's JSON object. **DO NOT add any conversational text before or after the JSON.** The system will handle the spoken response.
-            - For weather OR time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
+        3.  **Actions**: If the user's request is an action, your response MUST contain the action's JSON object. You should provide a natural, spoken confirmation BEFORE the JSON. The JSON is for the system only and should NEVER be spoken.
+            - For weather OR time in a specific city (e.g., "weather in London", "time in Tokyo"): \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
             - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the user's LOCAL time (e.g., "what's the time?"): \`{"action": "get_local_time"}\`.
             - For the current date: \`{"action": "get_date"}\`.
-        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
+        4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON or any markdown symbols.`;
         
         let conversationHistory = [
             { role: 'user', parts: [{ text: systemInstruction }] },
-            { role: 'model', parts: [{ text: "Understood. For real-time queries, I will only output the JSON." }] }
+            { role: 'model', parts: [{ text: "Okay, I understand. I will provide clean, spoken responses and use JSON only as a tool for the system." }] }
         ];
 
-        // --- 🎤 INITIALIZATION ---
+        // --- 🎤 INITIALIZATION & AUDIO UNLOCK ---
         function initializeApp() {
             try {
-                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window) {
+                // AudioContext is no longer needed for playback, but good for potential future audio processing
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') audioContext.resume();
+                
+                if ('webkitSpeechRecognition' in window) {
                     recognition = new webkitSpeechRecognition();
-                    recognition.continuous = true; // For live transcription
-                    recognition.interimResults = true; // For live transcription
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
                     recognition.lang = 'en-US';
 
                     recognition.onstart = () => setUIState('listening');
-                    recognition.onresult = handleRecognitionResult;
+                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error', "Voice error."); };
-                    recognition.onend = () => { if(voiceCircle.classList.contains('listening')) setUIState('idle', 'Hi'); };
-
-                    speechSynthesis.onvoiceschanged = () => {
-                        const voices = speechSynthesis.getVoices();
-                        preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
-                                       voices.find(v => v.name.includes('Zira') && v.lang.startsWith('en')) ||
-                                       voices.find(v => v.lang.startsWith('en-US'));
-                        console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
-                    };
+                    recognition.onend = () => { if(sphereContainer.classList.contains('listening')) setUIState('idle'); };
                 } else {
                     setUIState('error', "Browser not supported."); return;
                 }
                 
+                // Load and select the best available voice
+                loadAndSelectVoice();
+                if (synthesis.onvoiceschanged !== undefined) {
+                    synthesis.onvoiceschanged = loadAndSelectVoice;
+                }
+
                 isInitialized = true;
-                setUIState('idle', 'Hi');
+                setUIState('idle');
                 console.log("✅ System Initialized.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
@@ -180,40 +227,85 @@
             }
         }
         
-        // --- LIVE TRANSCRIPTION HANDLER ---
-        function handleRecognitionResult(event) {
-            let final_transcript = '';
-            let interim_transcript = '';
+        // --- VOICE SELECTION LOGIC ---
+        function loadAndSelectVoice() {
+            const voices = synthesis.getVoices();
+            if (!voices.length) { return; }
 
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    final_transcript += event.results[i][0].transcript;
-                } else {
-                    interim_transcript += event.results[i][0].transcript;
+            // Prioritized list of high-quality female English voices
+            const preferredVoiceNames = [
+                'Google US English', // Common on Chrome/Android
+                'Samantha',          // Default on macOS/iOS
+                'Microsoft Zira Desktop - English (United States)', // Common on Windows
+                'Google UK English Female',
+                'en-US' // Fallback to any US English voice
+            ];
+
+            for (const name of preferredVoiceNames) {
+                const foundVoice = voices.find(voice => 
+                    voice.name === name && voice.lang.startsWith('en')
+                );
+                if (foundVoice) {
+                    preferredVoice = foundVoice;
+                    break;
                 }
             }
             
-            statusText.textContent = interim_transcript || final_transcript;
+            // Generic fallback if no preferred voices are found
+            if (!preferredVoice) {
+                 preferredVoice = voices.find(voice => voice.lang.startsWith('en') && voice.name.includes('Female')) || voices.find(voice => voice.lang.startsWith('en-US'));
+            }
 
-            if (final_transcript) {
-                recognition.stop();
-                analyzeWithGemini(final_transcript);
+            if (preferredVoice) {
+                console.log(`✅ Voice selected: ${preferredVoice.name} (${preferredVoice.lang})`);
+            } else {
+                console.warn("⚠️ Could not find a preferred voice. Using browser default.");
             }
         }
 
-        // --- UI & MAIN CONTROL ---
+
+        // --- UI STATE MACHINE ---
         function setUIState(state, message = '') {
-            voiceCircle.className = 'voice-circle';
-            voiceCircle.classList.add(state);
-            micButton.disabled = (state !== 'idle');
-            statusText.textContent = message || '';
+            const states = ['idle', 'listening', 'thinking', 'speaking', 'error'];
+            states.forEach(s => sphereContainer.classList.remove(s));
+            sphereContainer.classList.add(state);
+            micButton.disabled = (state === 'thinking' || state === 'speaking');
+            
+            switch(state) {
+                case 'idle':
+                    statusText.textContent = message || 'Press the mic to speak';
+                    break;
+                case 'listening':
+                    statusText.textContent = 'Listening...';
+                    break;
+                case 'thinking':
+                    statusText.textContent = 'Thinking...';
+                    break;
+                case 'speaking':
+                    statusText.textContent = 'Speaking...';
+                    break;
+                case 'error':
+                    statusText.textContent = message || 'An error occurred.';
+                    setTimeout(() => setUIState('idle'), 3000); // Reset after error
+                    break;
+            }
         }
 
+        // --- 🕹️ MAIN CONTROL LOGIC ---
         micButton.addEventListener('click', () => {
             if (micButton.disabled) return;
-            if (!isInitialized) { initializeApp(); return; }
+            // First click initializes everything
+            if (!isInitialized) { 
+                initializeApp(); 
+                // A small delay to allow voices to load on some browsers before the first speech attempt.
+                setTimeout(() => { if (recognition) recognition.start(); }, 250);
+                return;
+            }
             if (recognition) {
-                speechSynthesis.cancel(); // Cancel any ongoing speech
+                 // Cancel any ongoing speech before listening again
+                if (synthesis.speaking) {
+                    synthesis.cancel();
+                }
                 recognition.start();
             }
         });
@@ -224,8 +316,7 @@
                 setUIState('error', "Didn't catch that."); return;
             }
             
-            isBusy = true;
-            setUIState('thinking', '...');
+            setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
@@ -244,43 +335,56 @@
                 console.log("🤖 Gemini responded:", geminiResponseText);
                 conversationHistory.push({ role: 'model', parts: [{ text: geminiResponseText }] });
 
+                const actionRegex = /{\s*"action"[\s\S]*?}/;
+                const match = geminiResponseText.match(actionRegex);
                 let action = null;
-                try {
-                    action = JSON.parse(geminiResponseText);
-                } catch (e) {
-                    // It's not a JSON, so it must be conversational text.
-                }
+                if (match) { try { action = JSON.parse(match[0]); } catch(e) { console.error("Could not parse action JSON:", e)} }
                 
-                if (action && action.action) {
-                    await handleAction(action, userQuery);
-                } else if (geminiResponseText) {
-                    await speakAndPlay(geminiResponseText);
+                const textToSpeak = sanitizeTextForSpeech(geminiResponseText);
+                
+                if (action) {
+                    await handleAction(action, userQuery, textToSpeak);
+                } else if (textToSpeak) {
+                    await speakAndPlay(textToSpeak);
                 }
 
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                isBusy = false;
-                setUIState('idle', 'Hi');
+                setUIState('idle');
             }
         }
         
+        function sanitizeTextForSpeech(text) {
+            if (!text) return "";
+            return text.replace(/{\s*"action"[\s\S]*?}/g, '').replace(/[*_`#]/g, '').trim();
+        }
+
         // --- 🚀 ACTION HANDLER ---
-        async function handleAction(action, userQuery) {
+        async function handleAction(action, userQuery, spokenConfirmation) {
             try {
+                if (spokenConfirmation) {
+                    await speakAndPlay(spokenConfirmation);
+                }
+
                 switch (action.action) {
                     case 'open_url':
-                        await speakAndPlay(`Opening ${new URL(action.url).hostname}`);
+                        if(!spokenConfirmation) await speakAndPlay("Okay, opening that.");
                         if (action.url) window.open(action.url, '_blank');
                         break;
                     case 'get_info_for_city':
                         const purpose = userQuery.toLowerCase().includes('time') ? 'time' : 'weather';
                         await getInfoForCity(action.location, purpose);
                         break;
-                    case 'get_local_time': await handleLocalTime(); break;
-                    case 'get_date': await handleDate(); break;
-                    default: throw new Error("Unknown action.");
+                    case 'get_local_time':
+                        await handleLocalTime();
+                        break;
+                    case 'get_date':
+                        await handleDate();
+                        break;
+                    default:
+                        throw new Error("Unknown action.");
                 }
             } catch (error) {
                 console.error("🔴 Action Handling Error:", error);
@@ -292,7 +396,7 @@
         function getCurrentLocation() {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
-                setUIState('thinking', 'Locating...');
+                setUIState('thinking', "Requesting location...");
                 navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
             });
         }
@@ -316,14 +420,14 @@
                     const position = await getCurrentLocation();
                     finalLocation = `${position.coords.latitude},${position.coords.longitude}`;
                 }
-                setUIState('thinking', `Getting info...`);
+                setUIState('thinking', `Getting info for ${finalLocation}...`);
                 const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${finalLocation}`;
                 const response = await fetch(API_URL);
                 const data = await response.json();
 
                 if (response.ok && data.location) {
                     const summary = purpose === 'time'
-                        ? `The time in ${data.location.name} is ${new Date(data.location.localtime).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`
+                        ? `The current time in ${data.location.name} is ${new Date(data.location.localtime).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`
                         : `The weather in ${data.location.name} is ${Math.round(data.current.temp_c)} degrees with ${data.current.condition.text}.`;
                     await speakAndPlay(summary);
                 } else {
@@ -335,19 +439,41 @@
             }
         }
 
-        // --- 🔊 BROWSER TTS FUNCTION ---
+        // --- 🔊 NEW & IMPROVED TTS & PLAYBACK FUNCTION using Web Speech API ---
         async function speakAndPlay(text) {
-            const sanitizedText = text.replace(/[*_`#]/g, '').trim();
-            if (!sanitizedText || !('speechSynthesis' in window)) return;
+            if (!text || !text.trim() || !synthesis) return;
             
-            setUIState('speaking', sanitizedText);
+            // If the browser is already speaking, stop it before starting a new utterance.
+            if (synthesis.speaking) {
+                synthesis.cancel();
+            }
+
             return new Promise((resolve, reject) => {
-                speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(sanitizedText);
-                if (preferredVoice) utterance.voice = preferredVoice;
-                utterance.onend = resolve;
-                utterance.onerror = reject;
-                speechSynthesis.speak(utterance);
+                setUIState('speaking');
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                // Assign the best voice we found during initialization
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+                
+                // Optional: Adjust pitch and rate for a more natural feel
+                utterance.pitch = 1;
+                utterance.rate = 1;
+
+                utterance.onend = () => {
+                    console.log("✅ Speech finished successfully.");
+                    resolve();
+                };
+                
+                utterance.onerror = (event) => {
+                    console.error("🔴 Web Speech API Error:", event.error);
+                    setUIState('error', 'Voice synthesis failed.');
+                    reject(event.error);
+                };
+                
+                synthesis.speak(utterance);
             });
         }
     </script>
