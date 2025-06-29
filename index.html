@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final v20.0)</title>
+    <title>Lhuhi - AI Assistant (Final v21.0)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -12,6 +12,7 @@
             --background-start: #0A0A10;
             --background-end: #000000;
             --button-bg: rgba(30, 41, 59, 0.5);
+            --glow-color: #00AFFF;
         }
         
         body {
@@ -29,7 +30,6 @@
             position: relative;
             z-index: 2;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
             width: 100%;
@@ -43,9 +43,11 @@
         
         #mic-button {
             position: absolute;
-            bottom: 15%;
+            bottom: 10%;
             background: var(--button-bg);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            /* NEW: Glowing effect */
+            box-shadow: 0 0 15px rgba(0, 175, 255, 0.3), inset 0 0 5px rgba(0, 175, 255, 0.2);
             backdrop-filter: blur(10px);
             border-radius: 50%;
             width: 80px; height: 80px;
@@ -56,8 +58,8 @@
             z-index: 3;
         }
         
-        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: #0ff; }
-        #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
+        #mic-button:hover:not(.busy) { transform: scale(1.1); border-color: var(--glow-color); }
+        #mic-button.busy { cursor: pointer; } /* Allow clicking to stop */
         #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
         
     </style>
@@ -91,9 +93,8 @@
             state: 'idle',
             angle: 0,
             amplitude: 0,
-            frequency: 0,
-            phase: 0,
             targetAmplitude: 5,
+            phase: 0
         };
 
         function setupCanvas() {
@@ -133,7 +134,6 @@
 
             viz.angle += rotationSpeed;
             viz.amplitude += (viz.targetAmplitude - viz.amplitude) * 0.1;
-            viz.frequency += (targetFrequency - viz.frequency) * 0.1;
 
             for (let i = 0; i < 3; i++) {
                 ctx.beginPath();
@@ -157,14 +157,14 @@
 
         function drawWave(cy) {
             viz.phase += 0.1;
-            viz.amplitude = 50 + Math.sin(viz.phase) * 10;
+            // The amplitude is now controlled by the onboundary event, but we decay it
+            viz.amplitude += (0 - viz.amplitude) * 0.1; 
             
             for (let i = 0; i < 3; i++) {
                 ctx.beginPath();
                 ctx.lineWidth = 2 + i * 2;
-                ctx.strokeStyle = `hsla(${(200 + i * 30) % 360}, 100%, 70%, ${1 - i * 0.3})`;
+                ctx.strokeStyle = `hsla(${(200 + i * 30) % 360}, 100%, 70%, ${0.3 + viz.amplitude / 100})`;
                 
-                // Draw across the full screen width
                 for (let x = 0; x < canvas.width; x++) {
                     const angle = (x / canvas.width) * Math.PI * 4 + viz.phase + i * 0.5;
                     const y = viz.amplitude * Math.sin(angle);
@@ -202,7 +202,7 @@
 
                     recognition.onstart = () => setUIState('listening');
                     recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
-                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error'); };
+                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('idle'); };
                     recognition.onend = () => { if(viz.state === 'listening') setUIState('idle'); };
 
                     speechSynthesis.onvoiceschanged = () => {
@@ -213,7 +213,7 @@
                         console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
                     };
                 } else {
-                    setUIState('error'); return;
+                    alert("Sorry, your browser does not support the required Speech APIs."); return;
                 }
                 
                 isInitialized = true;
@@ -221,21 +221,25 @@
                 console.log("✅ System Initialized.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
-                setUIState('error');
+                alert("Could not initialize the assistant.");
             }
         }
         
         // --- UI & MAIN CONTROL ---
         function setUIState(state) {
             viz.state = state;
-            micButton.disabled = (state !== 'idle');
+            isBusy = (state !== 'idle');
+            micButton.classList.toggle('busy', isBusy);
         }
 
         micButton.addEventListener('click', () => {
-            if (micButton.disabled) return;
+            if (isBusy) { // If it's busy, it must be speaking. Act as a stop button.
+                speechSynthesis.cancel();
+                setUIState('idle');
+                return;
+            }
             if (!isInitialized) { initializeApp(); return; }
             if (recognition) {
-                speechSynthesis.cancel();
                 recognition.start();
             }
         });
@@ -243,10 +247,9 @@
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
             if (!userQuery || !userQuery.trim()) {
-                setUIState('error'); return;
+                setUIState('idle'); return;
             }
             
-            isBusy = true;
             setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
@@ -279,7 +282,6 @@
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
             } finally {
-                isBusy = false;
                 setUIState('idle');
             }
         }
@@ -366,7 +368,12 @@
                 const utterance = new SpeechSynthesisUtterance(sanitizedText);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 
-                // The reliable way to check for end of speech
+                // NEW: Voice-driven animation
+                utterance.onboundary = (event) => {
+                    // Make the wave "jump" when a word starts
+                    viz.amplitude = 50 + Math.random() * 20;
+                };
+
                 const checkInterval = setInterval(() => {
                     if (!speechSynthesis.speaking) {
                         clearInterval(checkInterval);
@@ -383,7 +390,7 @@
                 
                 setTimeout(() => {
                     speechSynthesis.speak(utterance);
-                }, 50); // Small delay for cancel to work reliably
+                }, 50);
             });
         }
         
