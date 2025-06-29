@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (v22.1 - API Update)</title>
+    <title>Lhuhi - AI Assistant (v23.0 - Final API Fix)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -84,6 +84,8 @@
         let isInitialized = false;
         let isBusy = false;
         let preferredVoice = null;
+        let audioAnalyser;
+        let audioDataArray;
 
         // --- CANVAS ANIMATION ---
         const canvas = document.getElementById('animation-canvas');
@@ -117,22 +119,22 @@
 
         function drawOrb(cx, cy) {
             let rotationSpeed = 0.005;
-            let targetFrequency = 0.02;
-
             if (viz.state === 'idle') {
                 viz.targetAmplitude = 5 + Math.sin(Date.now() / 500) * 3;
             } else if (viz.state === 'listening') {
                 rotationSpeed = 0.02;
-                viz.targetAmplitude = 20;
-                targetFrequency = 0.03;
+                if (audioAnalyser) {
+                    audioAnalyser.getByteFrequencyData(audioDataArray);
+                    const avg = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
+                    viz.targetAmplitude = (avg / 255) * 40 + 5;
+                }
             } else if (viz.state === 'thinking') {
                 rotationSpeed = 0.1;
                 viz.targetAmplitude = 25 + Math.random() * 10;
-                targetFrequency = 0.05;
             }
 
             viz.angle += rotationSpeed;
-            viz.amplitude += (viz.targetAmplitude - viz.amplitude) * 0.1;
+            viz.amplitude += (viz.targetAmplitude - viz.amplitude) * 0.2;
 
             for (let i = 0; i < 3; i++) {
                 ctx.beginPath();
@@ -190,9 +192,17 @@
         ];
 
         // --- 🎤 INITIALIZATION ---
-        function initializeApp() {
+        async function initializeApp() {
             try {
-                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window) {
+                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window && navigator.mediaDevices) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioContext.createMediaStreamSource(stream);
+                    audioAnalyser = audioContext.createAnalyser();
+                    audioAnalyser.fftSize = 256;
+                    source.connect(audioAnalyser);
+                    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
                     recognition = new webkitSpeechRecognition();
                     recognition.continuous = false;
                     recognition.interimResults = false;
@@ -211,7 +221,7 @@
                         console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
                     };
                 } else {
-                    alert("Sorry, your browser does not support the required Speech APIs."); return;
+                    alert("Sorry, your browser does not support the required Speech & Media APIs."); return;
                 }
                 
                 isInitialized = true;
@@ -219,7 +229,7 @@
                 console.log("✅ System Initialized.");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
-                alert("Could not initialize the assistant.");
+                alert("Could not initialize the assistant. Please allow microphone access.");
             }
         }
         
@@ -250,7 +260,6 @@
             
             setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
-            // Using gemini-1.5-flash-latest as requested.
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
             try {
