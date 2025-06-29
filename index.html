@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final v19.0)</title>
+    <title>Lhuhi - AI Assistant (Final v20.0)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
 
         :root {
-            --background-start: #0A0A10;
-            --background-end: #000000;
+            --background-color: #000000;
             --text-color: #E2E8F0;
             --button-bg: rgba(30, 41, 59, 0.5);
         }
         
         body {
-            background: radial-gradient(circle, var(--background-start) 0%, var(--background-end) 100%);
+            background: var(--background-color);
             margin: 0;
             display: flex;
             justify-content: center;
@@ -26,26 +25,19 @@
             font-family: 'Poppins', sans-serif;
             color: var(--text-color);
         }
-        
-        #ui-container {
-            position: relative;
-            z-index: 2;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
-        }
 
         #animation-canvas {
-            position: absolute;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             z-index: 1;
         }
         
         #mic-button {
             position: absolute;
-            bottom: 15%;
+            bottom: 10%;
             background: var(--button-bg);
             border: 1px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -68,7 +60,7 @@
 
     <canvas id="animation-canvas"></canvas>
     <div id="ui-container">
-        <!-- Status text is no longer needed as transcription is not shown -->
+        <!-- UI elements are now drawn on the canvas -->
         <button id="mic-button" aria-label="Microphone button">
             <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
         </button>
@@ -81,99 +73,24 @@
         
         // --- DOM & STATE ---
         const micButton = document.getElementById('mic-button');
+        const canvas = document.getElementById('animation-canvas');
+        const ctx = canvas.getContext('2d');
         
         let recognition;
         let isInitialized = false;
         let isBusy = false;
         let preferredVoice = null;
-
-        // --- CANVAS ANIMATION ---
-        const canvas = document.getElementById('animation-canvas');
-        const ctx = canvas.getContext('2d');
+        
         const viz = {
             state: 'idle',
-            angle: 0,
-            amplitude: 0,
-            frequency: 0,
-            phase: 0
+            time: 0,
+            amplitude: 5,
+            frequency: 0.02,
+            targetAmplitude: 5,
+            lerpSpeed: 0.1,
+            hue: 200
         };
 
-        function setupCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-
-            if (viz.state === 'speaking') {
-                drawWave(centerX, centerY);
-            } else {
-                drawOrb(centerX, centerY);
-            }
-            
-            requestAnimationFrame(draw);
-        }
-
-        function drawOrb(cx, cy) {
-            let rotationSpeed = 0.005;
-            let targetAmplitude = 5;
-            let targetFrequency = 0.02;
-
-            if (viz.state === 'listening') {
-                rotationSpeed = 0.02;
-                targetAmplitude = 20;
-                targetFrequency = 0.03;
-            } else if (viz.state === 'thinking') {
-                rotationSpeed = 0.1;
-                targetAmplitude = 30;
-                targetFrequency = 0.05;
-            }
-
-            viz.angle += rotationSpeed;
-            viz.amplitude += (targetAmplitude - viz.amplitude) * 0.1;
-            viz.frequency += (targetFrequency - viz.frequency) * 0.1;
-
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.lineWidth = 2 + i * 1.5;
-                const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-                gradient.addColorStop(0, `hsl(${(viz.angle * 20 + i * 60) % 360}, 100%, 70%)`);
-                gradient.addColorStop(1, `hsl(${(viz.angle * 20 + i * 60 + 180) % 360}, 100%, 70%)`);
-                ctx.strokeStyle = gradient;
-
-                for (let a = 0; a < Math.PI * 2; a += 0.01) {
-                    const r = 100 + viz.amplitude * Math.sin(a * 4 + viz.angle + i * 2);
-                    const x = cx + r * Math.cos(a + i * Math.PI / 3);
-                    const y = cy + r * Math.sin(a + i * Math.PI / 3);
-                    if (a === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                ctx.stroke();
-            }
-        }
-
-        function drawWave(cx, cy) {
-            viz.phase += 0.1;
-            viz.amplitude = 50 + Math.sin(viz.phase) * 10;
-            
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.lineWidth = 2 + i * 2;
-                ctx.strokeStyle = `hsla(${(200 + i * 30) % 360}, 100%, 70%, ${1 - i * 0.3})`;
-                
-                for (let x = -canvas.width/4; x < canvas.width/4; x++) {
-                    const angle = x * 0.01 + viz.phase + i * 0.5;
-                    const y = viz.amplitude * Math.sin(angle);
-                    ctx.lineTo(cx + x, cy + y);
-                }
-                ctx.stroke();
-            }
-        }
-        
         // --- 🧠 AI SYSTEM PROMPT ---
         const systemInstruction = `You are Lhuhi, an AI assistant.
         **CRITICAL RULES:**
@@ -201,7 +118,7 @@
                     recognition.lang = 'en-US';
 
                     recognition.onstart = () => setUIState('listening');
-                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                    recognition.onresult = (event) => { const query = event.results[event.resultIndex][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
                     recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('error'); };
                     recognition.onend = () => { if(viz.state === 'listening') setUIState('idle'); };
 
@@ -310,7 +227,6 @@
         function getCurrentLocation() {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
-                setUIState('thinking');
                 navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
             });
         }
@@ -334,11 +250,9 @@
                     const position = await getCurrentLocation();
                     finalLocation = `${position.coords.latitude},${position.coords.longitude}`;
                 }
-                setUIState('thinking');
                 const API_URL = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${finalLocation}`;
                 const response = await fetch(API_URL);
                 const data = await response.json();
-
                 if (response.ok && data.location) {
                     const summary = purpose === 'time'
                         ? `The time in ${data.location.name} is ${new Date(data.location.localtime).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}.`
@@ -365,7 +279,6 @@
                 const utterance = new SpeechSynthesisUtterance(sanitizedText);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 
-                // The reliable way to check for end of speech
                 const checkInterval = setInterval(() => {
                     if (!speechSynthesis.speaking) {
                         clearInterval(checkInterval);
@@ -384,6 +297,96 @@
             });
         }
         
+        // --- CANVAS ANIMATION LOGIC ---
+        function setupCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            viz.time += 0.02;
+
+            switch (viz.state) {
+                case 'listening':
+                    drawListeningOrb(cx, cy);
+                    break;
+                case 'thinking':
+                    drawThinkingGlitch(cx, cy);
+                    break;
+                case 'speaking':
+                    drawSpeakingWave(cx, cy);
+                    break;
+                default: // idle
+                    drawIdleOrb(cx, cy);
+            }
+            requestAnimationFrame(draw);
+        }
+
+        function drawIdleOrb(cx, cy) {
+            const radius = 80 + 5 * Math.sin(viz.time * 2);
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.lineWidth = 3;
+                const gradient = ctx.createLinearGradient(cx - radius, cy, cx + radius, cy);
+                gradient.addColorStop(0, `hsl(${(viz.time * 10 + i * 120) % 360}, 100%, 70%)`);
+                gradient.addColorStop(1, `hsl(${(viz.time * 10 + i * 120 + 180) % 360}, 100%, 70%)`);
+                ctx.strokeStyle = gradient;
+                ctx.arc(cx, cy, radius + i * 10, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function drawListeningOrb(cx, cy) {
+            const radius = 120;
+            const rotation = viz.time * 2;
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                const angle = rotation + i * (Math.PI * 2 / 3);
+                const x = cx + 50 * Math.cos(angle);
+                const y = cy + 50 * Math.sin(angle);
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                gradient.addColorStop(0, `hsla(${(viz.time * 20 + i * 120) % 360}, 100%, 70%, 0.8)`);
+                gradient.addColorStop(1, `hsla(${(viz.time * 20 + i * 120) % 360}, 100%, 70%, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawThinkingGlitch(cx, cy) {
+            for (let i = 0; i < 20; i++) {
+                ctx.beginPath();
+                ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+                ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+                ctx.lineWidth = Math.random() * 3;
+                ctx.strokeStyle = `hsla(${Math.random() * 360}, 100%, 70%, 0.5)`;
+                ctx.stroke();
+            }
+        }
+        
+        function drawSpeakingWave(cx, cy) {
+            const waveWidth = canvas.width * 0.8;
+            viz.amplitude = 50 + Math.sin(viz.time * 5) * 15;
+            
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.lineWidth = 2 + i * 2;
+                ctx.strokeStyle = `hsla(${(200 + i * 40) % 360}, 100%, 70%, ${1 - i * 0.2})`;
+                
+                for (let x = 0; x <= waveWidth; x++) {
+                    const screenX = cx - waveWidth / 2 + x;
+                    const angle = (x / waveWidth) * Math.PI * 4 + viz.time * 5;
+                    const y = cy + viz.amplitude * Math.sin(angle + i * 2);
+                    ctx.lineTo(screenX, y);
+                }
+                ctx.stroke();
+            }
+        }
+
         // --- INITIALIZE & START ANIMATION ---
         setupCanvas();
         draw();
