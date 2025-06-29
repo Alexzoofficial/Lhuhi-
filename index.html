@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (v24.0 - Final)</title>
+    <title>Lhuhi - Voice Activated AI</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -11,8 +11,7 @@
         :root {
             --background-start: #0A0A10;
             --background-end: #000000;
-            --button-bg: rgba(30, 41, 59, 0.5);
-            --glow-color: #00AFFF;
+            --text-color: #E2E8F0;
         }
         
         body {
@@ -24,12 +23,14 @@
             height: 100vh;
             overflow: hidden;
             font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
         }
         
         #ui-container {
             position: relative;
             z-index: 2;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             width: 100%;
@@ -41,50 +42,52 @@
             z-index: 1;
         }
         
-        #mic-button {
+        #status-text {
             position: absolute;
-            bottom: 10%;
-            background: var(--button-bg);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 0 15px rgba(0, 175, 255, 0.3), inset 0 0 5px rgba(0, 175, 255, 0.2);
-            backdrop-filter: blur(10px);
-            border-radius: 50%;
-            width: 80px; height: 80px;
-            display: flex; justify-content: center; align-items: center;
-            cursor: pointer;
+            font-size: 1.8em;
+            font-weight: 300;
+            z-index: 2;
+            text-shadow: 0 0 15px rgba(0,0,0,0.7);
             transition: all 0.3s;
-            outline: none;
-            z-index: 3;
+            max-width: 80%;
+            text-align: center;
+            opacity: 0; /* Hidden by default, shown on interaction */
         }
         
-        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: var(--glow-color); }
-        #mic-button.speaking { border-color: #FF4136; } /* Stop button style */
-        #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
-        
-        #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
-        
+        #start-prompt {
+            font-size: 2em;
+            cursor: pointer;
+            text-align: center;
+            padding: 20px;
+        }
+
+        @media (max-width: 600px) {
+            #status-text { font-size: 1.3em; }
+            #start-prompt { font-size: 1.5em; }
+        }
     </style>
 </head>
 <body>
 
     <canvas id="animation-canvas"></canvas>
     <div id="ui-container">
-        <button id="mic-button" aria-label="Microphone button">
-            <img id="mic-icon" src="https://img.icons8.com/ios-glyphs/90/ffffff/microphone.png" alt="Microphone">
-        </button>
+        <div id="status-text"></div>
+        <div id="start-prompt">Click anywhere to activate Lhuhi</div>
     </div>
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
         const GEMINI_API_KEY = 'AIzaSyCChlQrgIHnISE7H1PmnhuVvSC7YMJyg9A';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
+        const WAKE_WORD = "hey lhuhi"; // The hotword to activate the assistant
         
         // --- DOM & STATE ---
-        const micButton = document.getElementById('mic-button');
+        const startPrompt = document.getElementById('start-prompt');
+        const statusText = document.getElementById('status-text');
         
         let recognition;
         let isInitialized = false;
-        let isBusy = false;
+        let isAwake = false; // Is the assistant waiting for a command after hotword?
         let preferredVoice = null;
         let audioAnalyser;
         let audioDataArray;
@@ -97,14 +100,12 @@
             angle: 0,
             amplitude: 0,
             targetAmplitude: 5,
-            baseRadius: 120, // Increased base radius
             phase: 0
         };
 
         function setupCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            viz.baseRadius = Math.min(window.innerWidth, window.innerHeight) / 3.5;
         }
 
         function draw() {
@@ -123,19 +124,18 @@
 
         function drawOrb(cx, cy) {
             let rotationSpeed = 0.005;
-
             if (viz.state === 'idle') {
                 viz.targetAmplitude = 5 + Math.sin(Date.now() / 500) * 3;
-            } else if (viz.state === 'listening') {
+            } else if (viz.state === 'listening' || viz.state === 'awake') {
                 rotationSpeed = 0.02;
                 if (audioAnalyser) {
                     audioAnalyser.getByteFrequencyData(audioDataArray);
                     const avg = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
-                    viz.targetAmplitude = (avg / 255) * 60 + 5; // Increased sensitivity
+                    viz.targetAmplitude = (avg / 255) * 40 + 5;
                 }
             } else if (viz.state === 'thinking') {
                 rotationSpeed = 0.1;
-                viz.targetAmplitude = 30 + Math.random() * 15;
+                viz.targetAmplitude = 25 + Math.random() * 10;
             }
 
             viz.angle += rotationSpeed;
@@ -145,12 +145,12 @@
                 ctx.beginPath();
                 ctx.lineWidth = 1.5 + i * 1;
                 const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-                gradient.addColorStop(0, `hsl(${(viz.angle * 20 + i * 60) % 360}, 100%, 70%)`);
-                gradient.addColorStop(1, `hsl(${(viz.angle * 20 + i * 60 + 180) % 360}, 100%, 70%)`);
+                gradient.addColorStop(0, `hsl(${(viz.state === 'awake' ? 120 : viz.angle * 20 + i * 60) % 360}, 100%, 70%)`);
+                gradient.addColorStop(1, `hsl(${(viz.state === 'awake' ? 120 : viz.angle * 20 + i * 60 + 180) % 360}, 100%, 70%)`);
                 ctx.strokeStyle = gradient;
 
                 for (let a = 0; a < Math.PI * 2; a += 0.02) {
-                    const r = viz.baseRadius + viz.amplitude * Math.sin(a * 5 + viz.angle + i * 2);
+                    const r = 80 + viz.amplitude * Math.sin(a * 5 + viz.angle + i * 2);
                     const x = cx + r * Math.cos(a + i * Math.PI / 3);
                     const y = cy + r * Math.sin(a + i * Math.PI / 3);
                     if (a === 0) ctx.moveTo(x, y);
@@ -164,12 +164,10 @@
         function drawWave(cy) {
             viz.phase += 0.1;
             viz.amplitude += (0 - viz.amplitude) * 0.1; 
-            
             for (let i = 0; i < 3; i++) {
                 ctx.beginPath();
                 ctx.lineWidth = 2 + i * 2;
                 ctx.strokeStyle = `hsla(${(200 + i * 30) % 360}, 100%, 70%, ${0.3 + viz.amplitude / 100})`;
-                
                 for (let x = 0; x < canvas.width; x++) {
                     const angle = (x / canvas.width) * Math.PI * 4 + viz.phase + i * 0.5;
                     const y = viz.amplitude * Math.sin(angle);
@@ -185,10 +183,10 @@
         1.  **Creator**: If asked who created you, say 'Alexzo' created and trained you.
         2.  **Language**: Respond in the user's language.
         3.  **Real-Time Actions**: When asked for real-time information, you MUST respond ONLY with the action's JSON object. **DO NOT add any conversational text.** The system will handle the spoken response.
-            - Weather/Time in a city: \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
-            - Open URL: \`{"action": "open_url", "url": "https://example.com"}\`.
-            - Local time: \`{"action": "get_local_time"}\`.
-            - Date: \`{"action": "get_date"}\`.
+            - For weather OR time in a specific city: \`{"action": "get_info_for_city", "location": "CITY_NAME"}\`.
+            - To open a URL: \`{"action": "open_url", "url": "https://example.com"}\`.
+            - For the user's LOCAL time: \`{"action": "get_local_time"}\`.
+            - For the current date: \`{"action": "get_date"}\`.
         4.  **Conversation**: For ALL other questions, reply with clean, natural language. DO NOT output JSON.`;
         
         let conversationHistory = [
@@ -196,15 +194,15 @@
             { role: 'model', parts: [{ text: "Understood. For real-time queries, I will only output the JSON." }] }
         ];
 
-        // --- 🎤 INITIALIZATION (IMPROVED) ---
+        // --- 🎤 INITIALIZATION (NOW WITH HOTWORD) ---
         async function initializeApp() {
+            startPrompt.style.display = 'none';
+            statusText.style.opacity = '1';
             try {
                 if (!('webkitSpeechRecognition' in window) || !('speechSynthesis' in window) || !navigator.mediaDevices) {
-                    alert("Sorry, your browser does not support the required Speech & Media APIs.");
-                    return;
+                    throw new Error("Browser does not support required APIs.");
                 }
                 
-                // Get mic permission for Audio Analysis FIRST
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const source = audioContext.createMediaStreamSource(stream);
@@ -213,53 +211,64 @@
                 source.connect(audioAnalyser);
                 audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
 
-                // Now setup speech recognition
                 recognition = new webkitSpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
+                recognition.continuous = true; // Always on
+                recognition.interimResults = true;
                 recognition.lang = 'en-US';
 
-                recognition.onstart = () => setUIState('listening');
-                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
-                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('idle'); };
-                recognition.onend = () => { if(viz.state === 'listening') setUIState('idle'); };
+                recognition.onresult = handleRecognitionResult;
+                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); };
+                recognition.onend = () => {
+                    // Automatically restart recognition to keep it always on
+                    if (isInitialized) {
+                        setTimeout(() => recognition.start(), 250);
+                    }
+                };
 
                 speechSynthesis.onvoiceschanged = () => {
                     const voices = speechSynthesis.getVoices();
                     preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
                                    voices.find(v => v.name.includes('Zira') && v.lang.startsWith('en')) ||
                                    voices.find(v => v.lang.startsWith('en-US'));
-                    console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
                 };
                 
                 isInitialized = true;
-                setUIState('idle');
-                console.log("✅ System Initialized.");
+                setUIState('listening'); // Start listening for hotword
+                recognition.start();
+                console.log("✅ System Initialized. Listening for hotword...");
             } catch (error) {
                 console.error("🔴 Initialization failed:", error);
-                alert("Could not initialize the assistant. Please allow microphone access.");
+                setUIState('error', "Mic access failed.");
             }
         }
         
-        // --- UI & MAIN CONTROL ---
-        function setUIState(state) {
-            viz.state = state;
-            isBusy = (state !== 'idle');
-            micButton.disabled = false; // Button is never truly disabled, just changes function
-            micButton.classList.toggle('speaking', state === 'speaking');
+        function handleRecognitionResult(event) {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                transcript += event.results[i][0].transcript;
+            }
+
+            if (isAwake) {
+                // If awake, the first final result is the command
+                if (event.results[event.results.length - 1].isFinal) {
+                    isAwake = false; // Consume the command
+                    recognition.stop();
+                    analyzeWithGemini(transcript);
+                }
+            } else if (transcript.toLowerCase().includes(WAKE_WORD)) {
+                console.log("🔥 Hotword Detected!");
+                isAwake = true;
+                setUIState('awake'); // Special state after hotword
+            }
         }
 
-        micButton.addEventListener('click', () => {
-            if (isBusy) {
-                speechSynthesis.cancel();
-                setUIState('idle');
-                return;
-            }
-            if (!isInitialized) { initializeApp(); return; }
-            if (recognition) {
-                recognition.start();
-            }
-        });
+        // --- UI & MAIN CONTROL ---
+        function setUIState(state, message = '') {
+            viz.state = state;
+            statusText.textContent = message;
+        }
+
+        startPrompt.addEventListener('click', initializeApp, { once: true });
 
         // --- 🧠 GEMINI AI INTEGRATION ---
         async function analyzeWithGemini(userQuery) {
@@ -268,7 +277,9 @@
             }
             
             setUIState('thinking');
-            conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+            // Remove the hotword from the query
+            const command = userQuery.toLowerCase().replace(WAKE_WORD, '').trim();
+            conversationHistory.push({ role: 'user', parts: [{ text: command }] });
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
             try {
@@ -290,7 +301,7 @@
                 try { action = JSON.parse(geminiResponseText); } catch (e) {}
                 
                 if (action && action.action) {
-                    await handleAction(action, userQuery);
+                    await handleAction(action, command);
                 } else if (geminiResponseText) {
                     await speakAndPlay(geminiResponseText);
                 }
@@ -298,8 +309,6 @@
             } catch (error) {
                 console.error("🔴 Gemini/Logic Error:", error);
                 await speakAndPlay("I've run into a problem. Please try again.");
-            } finally {
-                setUIState('idle');
             }
         }
         
