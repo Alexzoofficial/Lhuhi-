@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final v21.0)</title>
+    <title>Lhuhi - AI Assistant (Final v22.0)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -59,7 +59,7 @@
         }
         
         #mic-button:hover:not(.busy) { transform: scale(1.1); border-color: var(--glow-color); }
-        #mic-button.busy { cursor: pointer; } /* Allow clicking to stop */
+        #mic-button.busy { cursor: pointer; transform: scale(1.1); border-color: #FF4136; } /* Stop button style */
         #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
         
     </style>
@@ -233,7 +233,7 @@
         }
 
         micButton.addEventListener('click', () => {
-            if (isBusy) { // If it's busy, it must be speaking. Act as a stop button.
+            if (isBusy) {
                 speechSynthesis.cancel();
                 setUIState('idle');
                 return;
