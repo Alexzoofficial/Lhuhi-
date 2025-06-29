@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (v23.0 - Final API Fix)</title>
+    <title>Lhuhi - AI Assistant (v24.0 - Final)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -57,8 +57,10 @@
             z-index: 3;
         }
         
-        #mic-button:hover:not(.busy) { transform: scale(1.1); border-color: var(--glow-color); }
-        #mic-button.busy { cursor: pointer; transform: scale(1.1); border-color: #FF4136; } /* Stop button style */
+        #mic-button:hover:not(:disabled) { transform: scale(1.1); border-color: var(--glow-color); }
+        #mic-button.speaking { border-color: #FF4136; } /* Stop button style */
+        #mic-button:disabled { cursor: not-allowed; opacity: 0.4; }
+        
         #mic-icon { width: 40px; height: 40px; display: block; filter: invert(0.9); }
         
     </style>
@@ -74,7 +76,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyCChlQrgIHnISE7H1PmnhuVvSC7YMJyg9A'; // YOUR NEW API KEY
+        const GEMINI_API_KEY = 'AIzaSyCChlQrgIHnISE7H1PmnhuVvSC7YMJyg9A';
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE ---
@@ -95,12 +97,14 @@
             angle: 0,
             amplitude: 0,
             targetAmplitude: 5,
+            baseRadius: 120, // Increased base radius
             phase: 0
         };
 
         function setupCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            viz.baseRadius = Math.min(window.innerWidth, window.innerHeight) / 3.5;
         }
 
         function draw() {
@@ -119,6 +123,7 @@
 
         function drawOrb(cx, cy) {
             let rotationSpeed = 0.005;
+
             if (viz.state === 'idle') {
                 viz.targetAmplitude = 5 + Math.sin(Date.now() / 500) * 3;
             } else if (viz.state === 'listening') {
@@ -126,11 +131,11 @@
                 if (audioAnalyser) {
                     audioAnalyser.getByteFrequencyData(audioDataArray);
                     const avg = audioDataArray.reduce((a, b) => a + b) / audioDataArray.length;
-                    viz.targetAmplitude = (avg / 255) * 40 + 5;
+                    viz.targetAmplitude = (avg / 255) * 60 + 5; // Increased sensitivity
                 }
             } else if (viz.state === 'thinking') {
                 rotationSpeed = 0.1;
-                viz.targetAmplitude = 25 + Math.random() * 10;
+                viz.targetAmplitude = 30 + Math.random() * 15;
             }
 
             viz.angle += rotationSpeed;
@@ -145,7 +150,7 @@
                 ctx.strokeStyle = gradient;
 
                 for (let a = 0; a < Math.PI * 2; a += 0.02) {
-                    const r = 80 + viz.amplitude * Math.sin(a * 5 + viz.angle + i * 2);
+                    const r = viz.baseRadius + viz.amplitude * Math.sin(a * 5 + viz.angle + i * 2);
                     const x = cx + r * Math.cos(a + i * Math.PI / 3);
                     const y = cy + r * Math.sin(a + i * Math.PI / 3);
                     if (a === 0) ctx.moveTo(x, y);
@@ -191,38 +196,41 @@
             { role: 'model', parts: [{ text: "Understood. For real-time queries, I will only output the JSON." }] }
         ];
 
-        // --- 🎤 INITIALIZATION ---
+        // --- 🎤 INITIALIZATION (IMPROVED) ---
         async function initializeApp() {
             try {
-                if ('webkitSpeechRecognition' in window && 'speechSynthesis' in window && navigator.mediaDevices) {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const source = audioContext.createMediaStreamSource(stream);
-                    audioAnalyser = audioContext.createAnalyser();
-                    audioAnalyser.fftSize = 256;
-                    source.connect(audioAnalyser);
-                    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-
-                    recognition = new webkitSpeechRecognition();
-                    recognition.continuous = false;
-                    recognition.interimResults = false;
-                    recognition.lang = 'en-US';
-
-                    recognition.onstart = () => setUIState('listening');
-                    recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
-                    recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('idle'); };
-                    recognition.onend = () => { if(viz.state === 'listening') setUIState('idle'); };
-
-                    speechSynthesis.onvoiceschanged = () => {
-                        const voices = speechSynthesis.getVoices();
-                        preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
-                                       voices.find(v => v.name.includes('Zira') && v.lang.startsWith('en')) ||
-                                       voices.find(v => v.lang.startsWith('en-US'));
-                        console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
-                    };
-                } else {
-                    alert("Sorry, your browser does not support the required Speech & Media APIs."); return;
+                if (!('webkitSpeechRecognition' in window) || !('speechSynthesis' in window) || !navigator.mediaDevices) {
+                    alert("Sorry, your browser does not support the required Speech & Media APIs.");
+                    return;
                 }
+                
+                // Get mic permission for Audio Analysis FIRST
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(stream);
+                audioAnalyser = audioContext.createAnalyser();
+                audioAnalyser.fftSize = 256;
+                source.connect(audioAnalyser);
+                audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+                // Now setup speech recognition
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onstart = () => setUIState('listening');
+                recognition.onresult = (event) => { const query = event.results[0][0].transcript; console.log("✅ User said:", query); analyzeWithGemini(query); };
+                recognition.onerror = (event) => { console.error('🔴 Recognition error:', event.error); setUIState('idle'); };
+                recognition.onend = () => { if(viz.state === 'listening') setUIState('idle'); };
+
+                speechSynthesis.onvoiceschanged = () => {
+                    const voices = speechSynthesis.getVoices();
+                    preferredVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) || 
+                                   voices.find(v => v.name.includes('Zira') && v.lang.startsWith('en')) ||
+                                   voices.find(v => v.lang.startsWith('en-US'));
+                    console.log("Preferred voice:", preferredVoice ? preferredVoice.name : "Default");
+                };
                 
                 isInitialized = true;
                 setUIState('idle');
@@ -237,7 +245,8 @@
         function setUIState(state) {
             viz.state = state;
             isBusy = (state !== 'idle');
-            micButton.classList.toggle('busy', isBusy);
+            micButton.disabled = false; // Button is never truly disabled, just changes function
+            micButton.classList.toggle('speaking', state === 'speaking');
         }
 
         micButton.addEventListener('click', () => {
