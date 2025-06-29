@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lhuhi - AI Assistant (Final v22.0)</title>
+    <title>Lhuhi - AI Assistant (v22.1 - API Update)</title>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400&display=swap');
@@ -46,7 +46,6 @@
             bottom: 10%;
             background: var(--button-bg);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            /* NEW: Glowing effect */
             box-shadow: 0 0 15px rgba(0, 175, 255, 0.3), inset 0 0 5px rgba(0, 175, 255, 0.2);
             backdrop-filter: blur(10px);
             border-radius: 50%;
@@ -75,7 +74,7 @@
 
     <script>
         // --- ⚙️ CONFIGURATION & API KEYS ⚙️ ---
-        const GEMINI_API_KEY = 'AIzaSyAUryBO9wBmLS4cVLdMQJ3CPY2xh6LKwSk';
+        const GEMINI_API_KEY = 'AIzaSyCChlQrgIHnISE7H1PmnhuVvSC7YMJyg9A'; // YOUR NEW API KEY
         const WEATHER_API_KEY = '3a4d7ed40005449f9c0122940252606';
         
         // --- DOM & STATE ---
@@ -157,7 +156,6 @@
 
         function drawWave(cy) {
             viz.phase += 0.1;
-            // The amplitude is now controlled by the onboundary event, but we decay it
             viz.amplitude += (0 - viz.amplitude) * 0.1; 
             
             for (let i = 0; i < 3; i++) {
@@ -252,6 +250,7 @@
             
             setUIState('thinking');
             conversationHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+            // Using gemini-1.5-flash-latest as requested.
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
             
             try {
@@ -363,14 +362,12 @@
             setUIState('speaking');
             
             return new Promise((resolve, reject) => {
-                speechSynthesis.cancel(); // MOST IMPORTANT: Clear any previous utterances
+                speechSynthesis.cancel(); 
 
                 const utterance = new SpeechSynthesisUtterance(sanitizedText);
                 if (preferredVoice) utterance.voice = preferredVoice;
                 
-                // NEW: Voice-driven animation
                 utterance.onboundary = (event) => {
-                    // Make the wave "jump" when a word starts
                     viz.amplitude = 50 + Math.random() * 20;
                 };
 
